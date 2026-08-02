@@ -37,7 +37,11 @@ browsable guide without it.
 ## Notifications
 
 Notifications are generated **locally on your device** when you walk near a street you
-haven't visited yet. There is no push-notification server. You can decline notification
+haven't visited yet. There is no push-notification server. A local notification may still
+appear on your lock screen or while you're using another app — that is simply iOS displaying
+a notification your own device created; no server is involved, and nothing about it leaves
+your phone. (Because the app only uses location while it's in use, it can only notice you're
+near a street — and thus only create these notifications — while the app is open.) You can decline notification
 permission, or turn notifications off in the app's Settings tab or iOS Settings, and
 everything else keeps working.
 
