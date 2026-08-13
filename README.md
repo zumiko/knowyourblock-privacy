@@ -1,7 +1,10 @@
-# Know Your Block — Legal Documents
+# knowyourblock.nyc
 
-Public hosting for the legal documents of **Know Your Block**, an iOS walking companion
-for the history behind New York City's honorary street co-namings.
+Live marketing site for **Know Your Block** ([App Store](https://apps.apple.com/us/app/knowyourblock/id6797319245)),
+served via GitHub Pages at https://knowyourblock.nyc.
 
-- [Privacy Policy](PRIVACY_POLICY.md)
-- [Terms of Service](TERMS_OF_SERVICE.md)
+- Site source of truth: the private app repo's `website/` directory — copy its
+  contents here and push to deploy.
+- `PRIVACY_POLICY.md` / `TERMS_OF_SERVICE.md` stay at these exact paths: App
+  Store Connect links to them directly. The styled `privacy.html` / `terms.html`
+  pages mirror them.
