@@ -1,0 +1,191 @@
+{
+  "version": 8,
+  "name": "Know Your Block — Bold & Civic",
+  "metadata": {
+    "knowyourblock:note": "Hand-written Mapbox GL style (not built in Mapbox Studio) applying the 'Bold & Civic' palette to the mapbox-streets-v8 vector tileset. Bundled and loaded at runtime via MapboxMap.loadStyle(.json:) so the look is reproducible/version-controlled without a Studio account. See README.md 'Design decisions' for why."
+  },
+  "glyphs": "mapbox://fonts/mapbox/{fontstack}/{range}.pbf",
+  "sources": {
+    "composite": {
+      "type": "vector",
+      "url": "mapbox://mapbox.mapbox-streets-v8"
+    }
+  },
+  "layers": [
+    {
+      "id": "background",
+      "type": "background",
+      "paint": { "background-color": "#F4EFE4" }
+    },
+    {
+      "id": "landuse-park",
+      "type": "fill",
+      "source": "composite",
+      "source-layer": "landuse",
+      "filter": ["in", ["get", "class"], ["literal", ["park", "national_park", "cemetery", "golf_course", "pitch"]]],
+      "paint": { "fill-color": "#C4C19F", "fill-opacity": 0.55 }
+    },
+    {
+      "id": "landuse-overlay-park",
+      "type": "fill",
+      "source": "composite",
+      "source-layer": "landuse_overlay",
+      "filter": ["in", ["get", "class"], ["literal", ["park", "national_park"]]],
+      "paint": { "fill-color": "#C4C19F", "fill-opacity": 0.45 }
+    },
+    {
+      "id": "water",
+      "type": "fill",
+      "source": "composite",
+      "source-layer": "water",
+      "paint": { "fill-color": "#9FB6AD" }
+    },
+    {
+      "id": "building",
+      "type": "fill",
+      "source": "composite",
+      "source-layer": "building",
+      "minzoom": 15,
+      "paint": {
+        "fill-color": "#E7E0D0",
+        "fill-opacity": 0.6,
+        "fill-outline-color": "#D8CBAC"
+      }
+    },
+    {
+      "id": "road-path",
+      "type": "line",
+      "source": "composite",
+      "source-layer": "road",
+      "filter": ["==", ["get", "class"], "path"],
+      "minzoom": 14,
+      "paint": {
+        "line-color": "#D8CBAC",
+        "line-width": 1,
+        "line-dasharray": [2, 2]
+      }
+    },
+    {
+      "id": "road-minor-casing",
+      "type": "line",
+      "source": "composite",
+      "source-layer": "road",
+      "filter": ["in", ["get", "class"], ["literal", ["street", "street_limited", "service", "track"]]],
+      "minzoom": 12,
+      "layout": { "line-cap": "round", "line-join": "round" },
+      "paint": {
+        "line-color": "#1A1A1A",
+        "line-opacity": 0.06,
+        "line-width": ["interpolate", ["linear"], ["zoom"], 12, 1.4, 18, 6]
+      }
+    },
+    {
+      "id": "road-minor",
+      "type": "line",
+      "source": "composite",
+      "source-layer": "road",
+      "filter": ["in", ["get", "class"], ["literal", ["street", "street_limited", "service", "track"]]],
+      "minzoom": 12,
+      "layout": { "line-cap": "round", "line-join": "round" },
+      "paint": {
+        "line-color": "#E7E0D0",
+        "line-width": ["interpolate", ["linear"], ["zoom"], 12, 1, 18, 5]
+      }
+    },
+    {
+      "id": "road-major-casing",
+      "type": "line",
+      "source": "composite",
+      "source-layer": "road",
+      "filter": ["in", ["get", "class"], ["literal", ["primary", "secondary", "tertiary", "trunk", "motorway", "motorway_link", "trunk_link", "primary_link"]]],
+      "layout": { "line-cap": "round", "line-join": "round" },
+      "paint": {
+        "line-color": "#1A1A1A",
+        "line-opacity": 0.1,
+        "line-width": ["interpolate", ["linear"], ["zoom"], 10, 1.6, 18, 9]
+      }
+    },
+    {
+      "id": "road-major",
+      "type": "line",
+      "source": "composite",
+      "source-layer": "road",
+      "filter": ["in", ["get", "class"], ["literal", ["primary", "secondary", "tertiary", "trunk", "motorway", "motorway_link", "trunk_link", "primary_link"]]],
+      "layout": { "line-cap": "round", "line-join": "round" },
+      "paint": {
+        "line-color": "#D8CBAC",
+        "line-width": ["interpolate", ["linear"], ["zoom"], 10, 1.2, 18, 7]
+      }
+    },
+    {
+      "id": "admin-boundary",
+      "type": "line",
+      "source": "composite",
+      "source-layer": "admin",
+      "filter": ["all", ["<=", ["get", "admin_level"], 2], ["==", ["get", "maritime"], 0]],
+      "paint": {
+        "line-color": "#1A1A1A",
+        "line-opacity": 0.25,
+        "line-width": 1,
+        "line-dasharray": [3, 2]
+      }
+    },
+    {
+      "id": "road-label",
+      "type": "symbol",
+      "source": "composite",
+      "source-layer": "road_label",
+      "minzoom": 14,
+      "layout": {
+        "text-field": ["coalesce", ["get", "name_en"], ["get", "name"]],
+        "text-font": ["DIN Pro Medium", "Arial Unicode MS Regular"],
+        "text-size": 11,
+        "symbol-placement": "line",
+        "text-letter-spacing": 0.02
+      },
+      "paint": {
+        "text-color": "#1A1A1A",
+        "text-halo-color": "#F4EFE4",
+        "text-halo-width": 1.4
+      }
+    },
+    {
+      "id": "neighborhood-label",
+      "type": "symbol",
+      "source": "composite",
+      "source-layer": "place_label",
+      "filter": ["==", ["get", "class"], "neighbourhood"],
+      "minzoom": 12,
+      "layout": {
+        "text-field": ["coalesce", ["get", "name_en"], ["get", "name"]],
+        "text-font": ["DIN Pro Bold", "Arial Unicode MS Bold"],
+        "text-size": 13,
+        "text-transform": "uppercase",
+        "text-letter-spacing": 0.08
+      },
+      "paint": {
+        "text-color": "#1A1A1A",
+        "text-halo-color": "#F4EFE4",
+        "text-halo-width": 1.6
+      }
+    },
+    {
+      "id": "settlement-label",
+      "type": "symbol",
+      "source": "composite",
+      "source-layer": "place_label",
+      "filter": ["==", ["get", "class"], "settlement"],
+      "maxzoom": 12,
+      "layout": {
+        "text-field": ["coalesce", ["get", "name_en"], ["get", "name"]],
+        "text-font": ["DIN Pro Bold", "Arial Unicode MS Bold"],
+        "text-size": ["interpolate", ["linear"], ["zoom"], 6, 11, 12, 16]
+      },
+      "paint": {
+        "text-color": "#1A1A1A",
+        "text-halo-color": "#F4EFE4",
+        "text-halo-width": 1.6
+      }
+    }
+  ]
+}

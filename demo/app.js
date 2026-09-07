@@ -1,47 +1,47 @@
 /* Know Your Block — interactive web demo
  *
- * Mirrors the app's core loop in the browser: walk a stylized Bold & Civic map,
- * get a proximity notification when you reach an honorary street, open the sign,
- * read the story, and stamp it as visited.
+ * Mirrors the app's core loop in the browser, now on the app's REAL map:
+ * Mapbox GL JS rendering the same hand-authored Bold & Civic style JSON the
+ * iOS app loads (assets/BoldCivicStyle.json), with the honorees at their true
+ * coordinates. Walk the last block, get the proximity notification, open the
+ * sign, read the story, stamp it as visited.
+ *
+ * Getting around a real-scale city needs real-scale transit, so:
+ *  - Taps near the walker route along actual streets (Mapbox Directions,
+ *    walking profile; straight-line fallback if the request fails).
+ *  - Far-away taps or signs take the subway: stairs appear, the walker
+ *    descends, the map dims to a rocking train car, and the walker climbs
+ *    out about a block from the destination. Input is ignored mid-ride.
  *
  * Demo-only deviations from the shipping app (all deliberate):
- *  - Real NYC coordinates are compressed around their centroid (WORLD_SCALE) so all
- *    seven honorees sit in one walkable demo world. Relative bearings are preserved,
- *    and each sign is nudged onto the nearest street line so it stands on a corner.
- *  - The map is a procedurally drawn street grid in the app's palette, not Mapbox.
- *  - A visit un-stamps itself DEMO_RESET_MS after you close the story, so the next
- *    person at the kiosk can stamp the same sign.
+ *  - Walking speed is exaggerated (WALK_M_PER_S) so the last block takes
+ *    seconds, not minutes. The 40 m collect radius is real, though.
+ *  - A visit un-stamps itself DEMO_RESET_MS after you close the story, so the
+ *    next person at the kiosk can stamp the same sign.
+ *
+ * The Mapbox token below is a PUBLIC token (pk.) — safe to ship in client
+ * code by design. Restrict it to knowyourblock.nyc + localhost in the Mapbox
+ * dashboard so it can't be lifted for other sites.
  */
 (function () {
   "use strict";
 
+  var MAPBOX_TOKEN = "pk.eyJ1IjoiY2xhamVsbGkiLCJhIjoiY210cXRsbHRiMThtdDJ3cHJubTFpMHJsaCJ9.Mg2bCWRC25tKktVaPcScAQ";
   var STREETS = window.KYB_STREETS || [];
 
   // ---- tuning ------------------------------------------------------------
-  var COLLECT_RADIUS_M = 40;      // GameConstants.defaultCollectRadiusMeters
+  var COLLECT_RADIUS_M = 40;      // GameConstants.defaultCollectRadiusMeters (real metres)
   var REARM_RADIUS_M = 58;        // hysteresis before a street can re-notify
   var DEMO_RESET_MS = 10000;      // visits reset 10s after leaving the story
-  var WORLD_SCALE = 0.1;          // real metres -> demo metres
-  var BASE_PX_PER_M = 2.6;        // roughly the app's zoom-16 feel
-  var PX_PER_M = BASE_PX_PER_M;   // recomputed from viewport size
-  var uiScale = 1;                // pins, puck and zoom all track the screen size
-  var WALK_M_PER_S = 115;         // demo-world walking speed
-  var GRID_ANGLE = -29 * Math.PI / 180; // Brooklyn's street grid rotation
-  var MINOR_SPACING = 64;
-  var MAJOR_EVERY = 5;
+  var WALK_M_PER_S = 65;          // exaggerated demo walking speed
+  var SUBWAY_MIN_M = 600;         // farther than this and the walker rides the train
+  var ENTRANCE_M = 45;            // subway entrance spawns this far from the walker
+  var ARRIVE_M = 130;             // the train drops you about a block from the sign
+  var START_ZOOM = 16;
   var STRIDE_S = 0.62;            // one full walk cycle
-
-  var C = {
-    paper: "#f4efe4", olive: "#c4c19f", teal: "#9fb6ad",
-    roadMinor: "#e7e0d0", roadMajor: "#d8cbac", casing: "#ded3ba",
-    red: "#c0392b"
-  };
 
   // ---- elements ----------------------------------------------------------
   var screenEl = document.getElementById("screen");
-  var canvas = document.getElementById("map");
-  var ctx = canvas.getContext("2d");
-  var pinLayer = document.getElementById("pinLayer");
   var puckEl = document.getElementById("puck");
   var counterEl = document.getElementById("counter");
   var hintEl = document.getElementById("hint");
@@ -61,216 +61,171 @@
   var storyEl = document.getElementById("story");
   var linksAreaEl = document.getElementById("linksArea");
   var sheetNameEl = document.getElementById("sheetName");
+  var zoomInBtn = document.getElementById("zoomIn");
+  var zoomOutBtn = document.getElementById("zoomOut");
+  var transitEl = document.getElementById("transit");
+  var transitDestEl = document.getElementById("transitDest");
 
-  // ---- world model -------------------------------------------------------
-  var lat0 = 0, lng0 = 0;
-  STREETS.forEach(function (s) { lat0 += s.location.lat; lng0 += s.location.lng; });
-  lat0 /= STREETS.length; lng0 /= STREETS.length;
+  // ---- geography (real coordinates, metres via local equirectangular) ----
   var M_PER_DEG_LAT = 111320;
-  var M_PER_DEG_LNG = 111320 * Math.cos(lat0 * Math.PI / 180);
+  function mPerDegLng(lat) { return 111320 * Math.cos(lat * Math.PI / 180); }
 
-  var places = STREETS.map(function (s) {
+  /** Real metres between two {lng,lat} points (fine at city scale). */
+  function distM(a, b) {
+    var dx = (b.lng - a.lng) * mPerDegLng((a.lat + b.lat) / 2);
+    var dy = (b.lat - a.lat) * M_PER_DEG_LAT;
+    return Math.hypot(dx, dy);
+  }
+
+  /** Point `meters` from `from` toward `to`. */
+  function offsetToward(from, to, meters) {
+    var total = distM(from, to);
+    if (total < 1) return { lng: from.lng, lat: from.lat };
+    var t = meters / total;
     return {
-      data: s,
-      x: (s.location.lng - lng0) * M_PER_DEG_LNG * WORLD_SCALE,
-      y: (lat0 - s.location.lat) * M_PER_DEG_LAT * WORLD_SCALE, // +y = south = screen down
-      el: null, signEl: null,
-      collected: false, collectedAt: null,
-      armed: true, resetTimer: null
+      lng: from.lng + (to.lng - from.lng) * t,
+      lat: from.lat + (to.lat - from.lat) * t
     };
-  });
+  }
 
-  var byId = {};
-  places.forEach(function (p) { byId[p.data.id] = p; });
-
-  var view = { w: 0, h: 0 };
-  var dpr = Math.min(window.devicePixelRatio || 1, 2);
-
-  // ---- geometry helpers --------------------------------------------------
-  var COS_G = Math.cos(GRID_ANGLE), SIN_G = Math.sin(GRID_ANGLE);
-  function toGrid(x, y) { return { u: x * COS_G + y * SIN_G, v: -x * SIN_G + y * COS_G }; }
-  function fromGrid(u, v) { return { x: u * COS_G - v * SIN_G, y: u * SIN_G + v * COS_G }; }
-  function snap(n) { return Math.round(n / MINOR_SPACING) * MINOR_SPACING; }
-  function onLine(n) { return Math.abs(n - snap(n)) < 0.75; }
-
-  // Nudge each sign onto the nearer of its two street lines, so it stands on a real
-  // street the walker can reach rather than mid-block.
-  places.forEach(function (p) {
-    var g = toGrid(p.x, p.y);
-    if (Math.abs(g.u - snap(g.u)) <= Math.abs(g.v - snap(g.v))) {
-      g.u = snap(g.u);
-      p.axis = "u"; // stands on a constant-u street
-    } else {
-      g.v = snap(g.v);
-      p.axis = "v";
-    }
-    p.gu = g.u; p.gv = g.v;
-    var w = fromGrid(g.u, g.v);
-    p.x = w.x; p.y = w.y;
-  });
-
-  var start = places[0]; // Shirley Chisholm Place
-  var startG = start.axis === "u"
-    ? { u: start.gu, v: start.gv + 110 }
-    : { u: start.gu + 110, v: start.gv };
-  var startW = fromGrid(startG.u, startG.v);
-  var puck = { x: startW.x, y: startW.y, heading: -Math.PI / 2, moving: false };
-  var route = [];
-  var cam = { x: puck.x, y: puck.y, follow: true };
-
-  function screenX(wx) { return (wx - cam.x) * PX_PER_M + view.w / 2; }
-  function screenY(wy) { return (wy - cam.y) * PX_PER_M + view.h / 2; }
-  function worldX(sx) { return (sx - view.w / 2) / PX_PER_M + cam.x; }
-  function worldY(sy) { return (sy - view.h / 2) / PX_PER_M + cam.y; }
-  function dist(ax, ay, bx, by) { return Math.hypot(ax - bx, ay - by); }
-
-  // The demo world is compressed, so distances are reported in demo metres —
-  // the same scale the 40 m collect radius is expressed in.
   function formatDistance(m) {
     return m < 1000 ? Math.round(m) + " m" : (m / 1000).toFixed(1) + " km";
   }
 
-  // ---- background scenery (fixed, in grid space) -------------------------
-  var vMin = Math.min.apply(null, places.map(function (p) { return p.gv; }));
-  var vMax = Math.max.apply(null, places.map(function (p) { return p.gv; }));
-  var RIVER_V = vMin - 340;
-  var RIVER_HALF = 70;
-  // Parks fill whole blocks, inset to the kerb, so streets frame them rather than cross them.
-  var PARKS = [
-    { u: -430, v: (vMin + vMax) / 2 - 90, w: 300, h: 190 },
-    { u: 470, v: (vMin + vMax) / 2 + 210, w: 250, h: 230 },
-    { u: 60, v: vMax + 300, w: 380, h: 170 }
-  ].map(function (p) {
-    var inset = 5;
+  var places = STREETS.map(function (s) {
     return {
-      u0: snap(p.u - p.w / 2) + inset, u1: snap(p.u + p.w / 2) - inset,
-      v0: snap(p.v - p.h / 2) + inset, v1: snap(p.v + p.h / 2) - inset
+      data: s,
+      lng: s.location.lng, lat: s.location.lat,
+      el: null, signEl: null, marker: null,
+      collected: false, collectedAt: null,
+      armed: true, resetTimer: null
     };
   });
+  var byId = {};
+  places.forEach(function (p) { byId[p.data.id] = p; });
 
-  // ---- canvas rendering --------------------------------------------------
-  function resize() {
-    view.w = screenEl.clientWidth;
-    view.h = screenEl.clientHeight;
-    // One scale factor drives sign and puck size, so a phone, a laptop and a wall-sized
-    // touch table all render legible chrome; zoom follows it at half strength so bigger
-    // screens also reveal more of the neighbourhood.
-    uiScale = Math.max(0.9, Math.min(1.5, Math.min(view.w, view.h) / 460));
-    PX_PER_M = BASE_PX_PER_M * (1 + (uiScale - 1) * 0.5);
-    canvas.width = Math.round(view.w * dpr);
-    canvas.height = Math.round(view.h * dpr);
-    ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+  // The walker starts a short block north of the first entry (Shirley Chisholm Place).
+  var start = places[0];
+  var puck = {
+    lng: start.lng,
+    lat: start.lat + 160 / M_PER_DEG_LAT,
+    moving: false
+  };
+  var route = [];         // [{lng,lat}, ...] still to walk
+  var walkSeq = 0;        // cancels stale Directions responses
+  var follow = true;      // camera tracks the walker
+  var transit = false;    // subway ride in progress: ignore all input
+
+  // ---- map ---------------------------------------------------------------
+  mapboxgl.accessToken = MAPBOX_TOKEN;
+  var map = null;
+  var puckMarker = null;
+
+  fetch("assets/BoldCivicStyle.json")
+    .then(function (r) { return r.json(); })
+    .then(boot)
+    .catch(function (err) {
+      showToast("Map failed to load — check the network and the Mapbox token");
+      console.error(err);
+    });
+
+  function boot(styleJSON) {
+    map = new mapboxgl.Map({
+      container: "map",
+      style: styleJSON,
+      center: [puck.lng, puck.lat],
+      zoom: START_ZOOM,
+      minZoom: 9.2,
+      maxZoom: 18.5,
+      pitchWithRotate: false,
+      dragRotate: false
+    });
+    map.touchZoomRotate.disableRotation();
+    map.keyboard.disable(); // arrows walk the demo instead (below)
+
+    // walker puck becomes a real marker
+    puckEl.parentNode.removeChild(puckEl);
+    puckMarker = new mapboxgl.Marker({ element: puckEl, anchor: "center" })
+      .setLngLat([puck.lng, puck.lat])
+      .addTo(map);
+    puckEl.style.setProperty("--cycle", STRIDE_S + "s");
+
+    places.forEach(buildPin);
+    map.on("load", addHaloLayers);
+    map.on("zoom", rescalePins);
+    rescalePins();
+
+    map.on("dragstart", function () { follow = false; hintEl.classList.add("gone"); });
+    map.on("click", function (e) {
+      if (transit || sheetOpen) return;
+      hintEl.classList.add("gone");
+      goTo({ lng: e.lngLat.lng, lat: e.lngLat.lat }, null);
+    });
+    map.on("zoom", function () {
+      zoomInBtn.disabled = map.getZoom() >= map.getMaxZoom() - 0.01;
+      zoomOutBtn.disabled = map.getZoom() <= map.getMinZoom() + 0.01;
+    });
+
+    updateCounter();
+    requestAnimationFrame(frame);
   }
 
-  function visibleGridBounds() {
-    var pad = 200;
-    var corners = [
-      [worldX(-pad), worldY(-pad)],
-      [worldX(view.w + pad), worldY(-pad)],
-      [worldX(view.w + pad), worldY(view.h + pad)],
-      [worldX(-pad), worldY(view.h + pad)]
-    ].map(function (c) { return toGrid(c[0], c[1]); });
+  // ---- collect-radius halos (real 40 m circles on the map) ---------------
+  function haloRing(p) {
+    var pts = [];
+    var mLng = mPerDegLng(p.lat);
+    for (var i = 0; i <= 48; i++) {
+      var a = (i / 48) * Math.PI * 2;
+      pts.push([
+        p.lng + Math.cos(a) * COLLECT_RADIUS_M / mLng,
+        p.lat + Math.sin(a) * COLLECT_RADIUS_M / M_PER_DEG_LAT
+      ]);
+    }
+    return pts;
+  }
+
+  function haloData() {
     return {
-      uMin: Math.min.apply(null, corners.map(function (c) { return c.u; })),
-      uMax: Math.max.apply(null, corners.map(function (c) { return c.u; })),
-      vMin: Math.min.apply(null, corners.map(function (c) { return c.v; })),
-      vMax: Math.max.apply(null, corners.map(function (c) { return c.v; }))
+      type: "FeatureCollection",
+      features: places.filter(function (p) { return !p.collected; }).map(function (p) {
+        return {
+          type: "Feature",
+          properties: { inRange: !!p.inRange },
+          geometry: { type: "Polygon", coordinates: [haloRing(p)] }
+        };
+      })
     };
   }
 
-  function gridLine(uOrV, from, to, isU) {
-    var a = isU ? fromGrid(uOrV, from) : fromGrid(from, uOrV);
-    var b = isU ? fromGrid(uOrV, to) : fromGrid(to, uOrV);
-    ctx.moveTo(screenX(a.x), screenY(a.y));
-    ctx.lineTo(screenX(b.x), screenY(b.y));
-  }
-
-  function strokeGrid(bounds, spacing, everyNth, width, color) {
-    ctx.beginPath();
-    ctx.strokeStyle = color;
-    ctx.lineWidth = width;
-    var i, k;
-    for (i = Math.floor(bounds.uMin / spacing); i <= Math.ceil(bounds.uMax / spacing); i++) {
-      if (everyNth && (((i % everyNth) + everyNth) % everyNth) !== 0) continue;
-      gridLine(i * spacing, bounds.vMin, bounds.vMax, true);
-    }
-    for (k = Math.floor(bounds.vMin / spacing); k <= Math.ceil(bounds.vMax / spacing); k++) {
-      if (everyNth && (((k % everyNth) + everyNth) % everyNth) !== 0) continue;
-      gridLine(k * spacing, bounds.uMin, bounds.uMax, false);
-    }
-    ctx.stroke();
-  }
-
-  function fillGridRect(p, color) {
-    var pts = [
-      fromGrid(p.u0, p.v0),
-      fromGrid(p.u1, p.v0),
-      fromGrid(p.u1, p.v1),
-      fromGrid(p.u0, p.v1)
-    ];
-    ctx.beginPath();
-    pts.forEach(function (pt, i) {
-      var sx = screenX(pt.x), sy = screenY(pt.y);
-      if (i === 0) ctx.moveTo(sx, sy); else ctx.lineTo(sx, sy);
+  function addHaloLayers() {
+    map.addSource("halos", { type: "geojson", data: haloData() });
+    map.addLayer({
+      id: "halo-fill", type: "fill", source: "halos",
+      filter: ["get", "inRange"],
+      paint: { "fill-color": "rgba(192,57,43,0.07)" }
     });
-    ctx.closePath();
-    ctx.fillStyle = color;
-    ctx.fill();
-  }
-
-  function drawRiver(bounds) {
-    var step = 60;
-    ctx.beginPath();
-    var u;
-    for (u = bounds.uMin - step; u <= bounds.uMax + step; u += step) {
-      var v = RIVER_V + Math.sin(u / 420) * 90 - RIVER_HALF;
-      var pt = fromGrid(u, v);
-      ctx.lineTo(screenX(pt.x), screenY(pt.y));
-    }
-    for (u = bounds.uMax + step; u >= bounds.uMin - step; u -= step) {
-      var v2 = RIVER_V + Math.sin(u / 420) * 90 + RIVER_HALF;
-      var pt2 = fromGrid(u, v2);
-      ctx.lineTo(screenX(pt2.x), screenY(pt2.y));
-    }
-    ctx.closePath();
-    ctx.fillStyle = C.teal;
-    ctx.fill();
-  }
-
-  function drawMap() {
-    ctx.fillStyle = C.paper;
-    ctx.fillRect(0, 0, view.w, view.h);
-
-    var b = visibleGridBounds();
-    drawRiver(b);
-
-    // road casings, then the road surfaces on top
-    ctx.lineCap = "butt";
-    var rw = PX_PER_M / BASE_PX_PER_M; // roads keep a constant real-world width
-    strokeGrid(b, MINOR_SPACING, 0, 9 * rw, C.casing);
-    strokeGrid(b, MINOR_SPACING, 0, 7 * rw, C.roadMinor);
-    strokeGrid(b, MINOR_SPACING, MAJOR_EVERY, 20 * rw, C.casing);
-    strokeGrid(b, MINOR_SPACING, MAJOR_EVERY, 17 * rw, C.roadMajor);
-
-    PARKS.forEach(function (p) { fillGridRect(p, C.olive); });
-
-    // collect-radius halos for streets you haven't stamped yet
-    places.forEach(function (p) {
-      if (p.collected) return;
-      var d = dist(puck.x, puck.y, p.x, p.y);
-      var inRange = d <= COLLECT_RADIUS_M;
-      ctx.beginPath();
-      ctx.arc(screenX(p.x), screenY(p.y), COLLECT_RADIUS_M * PX_PER_M, 0, Math.PI * 2);
-      ctx.setLineDash(inRange ? [] : [7, 7]);
-      ctx.lineWidth = inRange ? 2.5 : 1.5;
-      ctx.strokeStyle = inRange ? "rgba(192,57,43,0.75)" : "rgba(192,57,43,0.28)";
-      if (inRange) { ctx.fillStyle = "rgba(192,57,43,0.07)"; ctx.fill(); }
-      ctx.stroke();
-      ctx.setLineDash([]);
+    map.addLayer({
+      id: "halo-line-far", type: "line", source: "halos",
+      filter: ["!", ["get", "inRange"]],
+      paint: { "line-color": "rgba(192,57,43,0.28)", "line-width": 1.5, "line-dasharray": [2, 2] }
+    });
+    map.addLayer({
+      id: "halo-line-near", type: "line", source: "halos",
+      filter: ["get", "inRange"],
+      paint: { "line-color": "rgba(192,57,43,0.75)", "line-width": 2.5 }
     });
   }
 
-  // ---- street sign component --------------------------------------------
+  var haloStamp = "";
+  function refreshHalos() {
+    if (!map.getSource("halos")) return;
+    var stamp = places.map(function (p) { return (p.collected ? "c" : p.inRange ? "r" : "f"); }).join("");
+    if (stamp === haloStamp) return;
+    haloStamp = stamp;
+    map.getSource("halos").setData(haloData());
+  }
+
+  // ---- street sign component (unchanged from the classic demo) -----------
   function buildSign(street, plateSize, badgeSize, collected) {
     var sign = document.createElement("div");
     sign.className = "sign" + (collected ? "" : " locked");
@@ -321,90 +276,70 @@
     btn.appendChild(shadow);
     btn.addEventListener("click", function (e) {
       e.stopPropagation();
+      if (transit) return; // no taps register during the subway ride
       openStreet(place.data.id);
     });
 
     place.el = btn;
     place.signEl = sign;
-    pinLayer.appendChild(btn);
+
+    var root = document.createElement("div");
+    root.className = "pin-root";
+    root.appendChild(btn);
+    place.marker = new mapboxgl.Marker({ element: root, anchor: "bottom" })
+      .setLngLat([place.lng, place.lat])
+      .addTo(map);
   }
 
-  places.forEach(buildPin);
+  /** Signs shrink as you pull back to citywide zoom, but never past legibility. */
+  function rescalePins() {
+    var z = map.getZoom();
+    var t = Math.max(0, Math.min(1, (z - 10.5) / (15.5 - 10.5)));
+    var s = 0.3 + t * 0.7;
+    places.forEach(function (p) { p.el.style.transform = "scale(" + s + ")"; });
+  }
 
   function refreshPin(place) {
     place.signEl.classList.toggle("locked", !place.collected);
     place.el.classList.toggle("pulsing", !place.collected);
   }
 
-  // ---- walking -----------------------------------------------------------
-  // The walker never cuts across a block: routes are built in grid space as a chain of
-  // segments that each run along one street, turning only at intersections.
-
-  /** Nearest point on the street grid to an arbitrary spot, plus the street it lies on. */
-  function snapToStreet(g) {
-    return Math.abs(g.u - snap(g.u)) <= Math.abs(g.v - snap(g.v))
-      ? { u: snap(g.u), v: g.v, axis: "u" }
-      : { u: g.u, v: snap(g.v), axis: "v" };
+  // ---- getting around ----------------------------------------------------
+  function goTo(dest, targetPlace) {
+    if (distM(puck, dest) > SUBWAY_MIN_M) rideSubway(dest, targetPlace);
+    else walkVia(dest);
   }
 
-  /** Waypoints from a start on street `axis` to `dest`, turning only at corners. */
-  function legsFrom(from, axis, dest) {
-    var pts = [];
-    if (axis === "u") {
-      if (dest.axis === "v") {
-        pts.push({ u: from.u, v: dest.v });   // walk this street to the cross street
-        pts.push({ u: dest.u, v: dest.v });   // then along the cross street
-      } else if (Math.abs(dest.u - from.u) < 0.75) {
-        pts.push({ u: dest.u, v: dest.v });   // same street the whole way
-      } else {
-        var crossV = snap(dest.v);
-        pts.push({ u: from.u, v: crossV });
-        pts.push({ u: dest.u, v: crossV });
-        pts.push({ u: dest.u, v: dest.v });
-      }
-    } else {
-      if (dest.axis === "u") {
-        pts.push({ u: dest.u, v: from.v });
-        pts.push({ u: dest.u, v: dest.v });
-      } else if (Math.abs(dest.v - from.v) < 0.75) {
-        pts.push({ u: dest.u, v: dest.v });
-      } else {
-        var crossU = snap(dest.u);
-        pts.push({ u: crossU, v: from.v });
-        pts.push({ u: crossU, v: dest.v });
-        pts.push({ u: dest.u, v: dest.v });
-      }
-    }
-    return pts;
-  }
+  /** Walk along real streets (Mapbox Directions, walking profile). */
+  function walkVia(dest) {
+    var seq = ++walkSeq;
+    var url = "https://api.mapbox.com/directions/v5/mapbox/walking/" +
+      puck.lng + "," + puck.lat + ";" + dest.lng + "," + dest.lat +
+      "?geometries=geojson&overview=full&access_token=" + MAPBOX_TOKEN;
 
-  function routeLength(from, pts) {
-    var total = 0, prev = from;
-    pts.forEach(function (p) { total += Math.hypot(p.u - prev.u, p.v - prev.v); prev = p; });
-    return total;
-  }
-
-  function walkTo(x, y) {
-    var from = toGrid(puck.x, puck.y);
-    var dest = snapToStreet(toGrid(x, y));
-
-    // The walker is always on at least one street; at a corner, take the shorter route.
-    var options = [];
-    if (onLine(from.u)) options.push(legsFrom(from, "u", dest));
-    if (onLine(from.v)) options.push(legsFrom(from, "v", dest));
-    if (!options.length) options.push(legsFrom(from, "u", dest)); // safety net
-
-    var best = options.reduce(function (a, b) {
-      return routeLength(from, b) < routeLength(from, a) ? b : a;
-    });
-
-    route = best
-      .map(function (p) { return fromGrid(p.u, p.v); })
-      .filter(function (p, i, arr) {
-        var prev = i === 0 ? puck : arr[i - 1];
-        return dist(prev.x, prev.y, p.x, p.y) > 0.5;
+    var fallback = setTimeout(function () { if (seq === walkSeq) setRoute([dest], seq); }, 2500);
+    fetch(url)
+      .then(function (r) { return r.json(); })
+      .then(function (json) {
+        clearTimeout(fallback);
+        if (seq !== walkSeq) return;
+        var coords = json.routes && json.routes[0] && json.routes[0].geometry.coordinates;
+        var pts = (coords || []).map(function (c) { return { lng: c[0], lat: c[1] }; });
+        pts.push(dest); // Directions snaps to the road network; still end exactly at the tap
+        setRoute(pts.length ? pts : [dest], seq);
+      })
+      .catch(function () {
+        clearTimeout(fallback);
+        if (seq === walkSeq) setRoute([dest], seq);
       });
-    cam.follow = false;
+  }
+
+  function setRoute(pts, seq) {
+    if (seq !== walkSeq) return;
+    route = pts.filter(function (p, i, arr) {
+      var prev = i === 0 ? puck : arr[i - 1];
+      return distM(prev, p) > 0.5;
+    });
   }
 
   function stepWalk(dt) {
@@ -415,23 +350,115 @@
     var budget = WALK_M_PER_S * dt;
     while (budget > 0 && route.length) {
       var next = route[0];
-      var dx = next.x - puck.x, dy = next.y - puck.y;
-      var d = Math.hypot(dx, dy);
+      var d = distM(puck, next);
+      if (d > 0.001) puckEl.classList.toggle("flip", next.lng < puck.lng);
       if (d <= budget) {
-        puck.x = next.x; puck.y = next.y;
+        puck.lng = next.lng; puck.lat = next.lat;
         budget -= d;
         route.shift();
       } else {
-        puck.x += dx / d * budget;
-        puck.y += dy / d * budget;
+        var t = budget / d;
+        puck.lng += (next.lng - puck.lng) * t;
+        puck.lat += (next.lat - puck.lat) * t;
         budget = 0;
       }
-      if (d > 0.001) puck.heading = Math.atan2(dy, dx);
     }
-    if (!route.length) cam.follow = true;
-
+    if (!route.length) follow = true;
     if (!puck.moving) { puck.moving = true; puckEl.classList.add("walking"); }
-    puckEl.classList.toggle("flip", Math.cos(puck.heading) < 0);
+  }
+
+  // ---- the subway ride ---------------------------------------------------
+  function sleep(ms) { return new Promise(function (res) { setTimeout(res, ms); }); }
+
+  function stairsMarker(at) {
+    var el = document.createElement("div");
+    el.className = "substairs";
+    el.innerHTML =
+      '<div class="lamp"></div>' +
+      '<div class="stairwell"><i></i><i></i><i></i><i></i></div>';
+    return new mapboxgl.Marker({ element: el, anchor: "bottom" })
+      .setLngLat([at.lng, at.lat])
+      .addTo(map);
+  }
+
+  function walkStraightTo(dest) {
+    return new Promise(function (res) {
+      walkSeq++;
+      route = [dest];
+      (function wait() {
+        if (!route.length && distM(puck, dest) < 2) res();
+        else setTimeout(wait, 80);
+      })();
+    });
+  }
+
+  function rideSubway(dest, targetPlace) {
+    if (transit) return;
+    transit = true;
+    walkSeq++; route = [];
+    hideNotification();
+    hintEl.classList.add("gone");
+
+    var entrance = offsetToward(puck, dest, ENTRANCE_M);
+    var arrive = targetPlace
+      ? offsetToward({ lng: targetPlace.lng, lat: targetPlace.lat }, puck, ARRIVE_M)
+      : offsetToward(dest, puck, Math.min(ARRIVE_M, distM(puck, dest) / 2));
+    var destName = targetPlace ? targetPlace.data.honoraryName : nearestName(dest);
+
+    var inMarker = stairsMarker(entrance);
+    var outMarker = null;
+
+    walkStraightTo(entrance)
+      .then(function () {
+        puckEl.classList.add("descending");
+        return sleep(750);
+      })
+      .then(function () {
+        transitDestEl.textContent = "Riding to " + destName;
+        transitEl.hidden = false;
+        requestAnimationFrame(function () { transitEl.classList.add("show"); });
+        return sleep(450);
+      })
+      .then(function () {
+        // relocate the world while it's dark
+        inMarker.remove();
+        puck.lng = arrive.lng; puck.lat = arrive.lat;
+        puckMarker.setLngLat([puck.lng, puck.lat]);
+        map.jumpTo({ center: [arrive.lng, arrive.lat], zoom: Math.max(map.getZoom(), 15.4) });
+        outMarker = stairsMarker(arrive);
+        return sleep(3100); // the ride itself
+      })
+      .then(function () {
+        transitEl.classList.remove("show");
+        return sleep(420);
+      })
+      .then(function () {
+        transitEl.hidden = true;
+        puckEl.classList.remove("descending");
+        puckEl.classList.add("ascending");
+        return sleep(750);
+      })
+      .then(function () {
+        puckEl.classList.remove("ascending");
+        follow = true;
+        transit = false;
+        showToast(targetPlace
+          ? "One block from " + destName + " — walk the rest"
+          : "This is your stop");
+        clearTimeout(toastTimer);
+        toastTimer = setTimeout(hideToast, 3200);
+        return sleep(2400);
+      })
+      .then(function () { if (outMarker) outMarker.remove(); });
+  }
+
+  function nearestName(pt) {
+    var best = places[0], bestD = Infinity;
+    places.forEach(function (p) {
+      var d = distM(pt, p);
+      if (d < bestD) { bestD = d; best = p; }
+    });
+    return bestD < 900 ? best.data.honoraryName : "the next neighborhood";
   }
 
   // ---- proximity + notification -----------------------------------------
@@ -450,6 +477,7 @@
     clearTimeout(notifTimer);
   }
   notifEl.addEventListener("click", function () {
+    if (transit) return;
     if (notifStreetId) openStreet(notifStreetId);
     hideNotification();
   });
@@ -460,13 +488,13 @@
   function updateProximity() {
     var nearest = null, nearestD = Infinity;
     places.forEach(function (p) {
-      var d = dist(puck.x, puck.y, p.x, p.y);
+      var d = distM(puck, p);
       p.distance = d;
       p.inRange = d <= COLLECT_RADIUS_M;
 
       if (!p.collected) {
         if (d > REARM_RADIUS_M) p.armed = true;
-        else if (p.inRange && p.armed && !sheetOpen) {
+        else if (p.inRange && p.armed && !sheetOpen && !transit) {
           p.armed = false;
           showNotification(p);
         }
@@ -479,18 +507,21 @@
       peekNameEl.textContent = nearest.data.honoraryName;
       peekDistEl.textContent = nearest.inRange
         ? "In range — tap the sign to visit"
-        : formatDistance(nearestD) + " away";
+        : formatDistance(nearestD) + " away" + (nearestD > SUBWAY_MIN_M ? " — tap to ride the subway" : "");
       peekEl.classList.toggle("in-range", nearest.inRange);
-      var ang = Math.atan2(nearest.y - puck.y, nearest.x - puck.x) + Math.PI / 2;
+      var mLng = mPerDegLng(puck.lat);
+      var ang = Math.atan2(-(nearest.lat - puck.lat) * M_PER_DEG_LAT,
+        (nearest.lng - puck.lng) * mLng) + Math.PI / 2;
       peekArrowEl.style.transform = "rotate(" + ang + "rad)";
     } else {
       peekEl.hidden = false;
-      peekNameEl.textContent = "All seven collected";
+      peekNameEl.textContent = "All " + places.length + " collected";
       peekDistEl.textContent = "Visits reset shortly after you close a story";
       peekEl.classList.remove("in-range");
       peekArrowEl.style.transform = "rotate(0rad)";
     }
 
+    refreshHalos();
     if (sheetOpen && currentPlace) refreshCollectArea(currentPlace);
   }
 
@@ -501,72 +532,40 @@
     lastFrame = now;
 
     stepWalk(dt);
-    if (cam.follow) {
-      cam.x += (puck.x - cam.x) * Math.min(1, dt * 6);
-      cam.y += (puck.y - cam.y) * Math.min(1, dt * 6);
+    puckMarker.setLngLat([puck.lng, puck.lat]);
+
+    if (follow && !transit) {
+      var c = map.getCenter();
+      var k = Math.min(1, dt * 6);
+      if (distM(c, puck) > 0.5) {
+        map.jumpTo({ center: [c.lng + (puck.lng - c.lng) * k, c.lat + (puck.lat - c.lat) * k] });
+      }
     }
-
-    drawMap();
-
-    places.forEach(function (p) {
-      p.el.style.transform = "translate3d(" + screenX(p.x) + "px," + screenY(p.y) + "px,0)" +
-        " translate(-50%,-100%) scale(" + uiScale + ")";
-    });
-    puckEl.style.transform = "translate3d(" + screenX(puck.x) + "px," + screenY(puck.y) + "px,0)" +
-      " translate(-50%,-50%) scale(" + uiScale + ")";
 
     updateProximity();
     requestAnimationFrame(frame);
   }
 
-  // ---- map gestures ------------------------------------------------------
-  var drag = null;
-  screenEl.addEventListener("pointerdown", function (e) {
-    if (sheetOpen) return;
-    if (e.target.closest(".pin, .notif, .sheet, .topbar")) return;
-    drag = { id: e.pointerId, x: e.clientX, y: e.clientY, moved: 0 };
-    screenEl.setPointerCapture(e.pointerId);
-    screenEl.classList.add("dragging");
-  });
-
-  screenEl.addEventListener("pointermove", function (e) {
-    if (!drag || e.pointerId !== drag.id) return;
-    var dx = e.clientX - drag.x, dy = e.clientY - drag.y;
-    drag.moved += Math.hypot(dx, dy);
-    drag.x = e.clientX; drag.y = e.clientY;
-    cam.follow = false;
-    cam.x -= dx / PX_PER_M;
-    cam.y -= dy / PX_PER_M;
-    hintEl.classList.add("gone");
-  });
-
-  function endDrag(e) {
-    if (!drag || e.pointerId !== drag.id) return;
-    var rect = screenEl.getBoundingClientRect();
-    if (drag.moved > 8) {
-      // Swiped the map: the walker sets off for wherever you swiped to.
-      walkTo(cam.x, cam.y);
-    } else {
-      // Tapped a spot: walk straight there.
-      walkTo(worldX(e.clientX - rect.left), worldY(e.clientY - rect.top));
-      hintEl.classList.add("gone");
-    }
-    drag = null;
-    screenEl.classList.remove("dragging");
-  }
-  screenEl.addEventListener("pointerup", endDrag);
-  screenEl.addEventListener("pointercancel", endDrag);
+  // ---- zoom + keyboard ---------------------------------------------------
+  zoomInBtn.addEventListener("click", function () { map.zoomIn(); });
+  zoomOutBtn.addEventListener("click", function () { map.zoomOut(); });
 
   document.addEventListener("keydown", function (e) {
     if (sheetOpen) {
       if (e.key === "Escape") closeSheet();
       return;
     }
-    var step = MINOR_SPACING;
-    var d = { ArrowUp: [0, -step], ArrowDown: [0, step], ArrowLeft: [-step, 0], ArrowRight: [step, 0] }[e.key];
-    if (!d) return;
+    if (transit) return;
+    if (e.key === "+" || e.key === "=") { map.zoomIn(); return; }
+    if (e.key === "-" || e.key === "_") { map.zoomOut(); return; }
+    var step = 85; // one short block
+    var d = { ArrowUp: [0, step], ArrowDown: [0, -step], ArrowLeft: [-step, 0], ArrowRight: [step, 0] }[e.key];
+    if (!d || !map) return;
     e.preventDefault();
-    walkTo(puck.x + d[0], puck.y + d[1]);
+    walkVia({
+      lng: puck.lng + d[0] / mPerDegLng(puck.lat),
+      lat: puck.lat + d[1] / M_PER_DEG_LAT
+    });
     hintEl.classList.add("gone");
   });
 
@@ -634,6 +633,18 @@
     box.appendChild(t);
     box.appendChild(sub);
     collectAreaEl.appendChild(box);
+
+    if ((place.distance || 0) > SUBWAY_MIN_M) {
+      var ride = document.createElement("button");
+      ride.type = "button";
+      ride.className = "subway-btn";
+      ride.innerHTML = '<span class="route-bullet">K</span> Ride the Subway There';
+      ride.addEventListener("click", function () {
+        closeSheet();
+        rideSubway({ lng: place.lng, lat: place.lat }, place);
+      });
+      collectAreaEl.appendChild(ride);
+    }
   }
 
   function renderHero(place) {
@@ -650,6 +661,7 @@
   }
 
   function openStreet(id) {
+    if (transit) return;
     var place = byId[id];
     if (!place) return;
     clearTimeout(place.resetTimer);
@@ -745,7 +757,7 @@
     updateCounter();
   }
 
-  var resetToastTimer = null;
+  var toastTimer = null;
   function scheduleReset(place) {
     clearTimeout(place.resetTimer);
     var secondsLeft = Math.round(DEMO_RESET_MS / 1000);
@@ -758,13 +770,13 @@
       } else {
         place.collected = false;
         place.collectedAt = null;
-        place.armed = dist(puck.x, puck.y, place.x, place.y) > REARM_RADIUS_M;
+        place.armed = distM(puck, place) > REARM_RADIUS_M;
         place.resetTimer = null;
         refreshPin(place);
         updateCounter();
         showToast(place.data.honoraryName + " is ready for the next visitor");
-        clearTimeout(resetToastTimer);
-        resetToastTimer = setTimeout(hideToast, 2600);
+        clearTimeout(toastTimer);
+        toastTimer = setTimeout(hideToast, 2600);
       }
     }
     tick();
@@ -775,12 +787,4 @@
     toastEl.classList.add("show");
   }
   function hideToast() { toastEl.classList.remove("show"); }
-
-  // ---- boot --------------------------------------------------------------
-  window.addEventListener("resize", resize);
-  if (window.ResizeObserver) new ResizeObserver(resize).observe(screenEl);
-  resize();
-  updateCounter();
-  puckEl.style.setProperty("--cycle", STRIDE_S + "s");
-  requestAnimationFrame(frame);
 })();

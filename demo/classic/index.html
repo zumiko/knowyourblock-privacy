@@ -4,9 +4,8 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
 <title>Know Your Block — Interactive Demo</title>
-<meta name="description" content="A browser demo of Know Your Block on the real map: walk NYC, ride the subway between honorary street signs, read the story, stamp the sign as visited.">
+<meta name="description" content="A browser demo of Know Your Block: walk a stylized NYC map, find honorary street signs, read the story, stamp the sign as visited.">
 <link rel="icon" href="assets/favicon-64.png">
-<link href="https://api.mapbox.com/mapbox-gl-js/v3.8.0/mapbox-gl.css" rel="stylesheet">
 <link rel="stylesheet" href="styles.css">
 </head>
 <body>
@@ -14,10 +13,11 @@
 <div class="device">
   <!-- ---------- map screen ---------- -->
   <div class="screen" id="screen">
-    <div id="map"></div>
+    <canvas id="map"></canvas>
 
-    <!-- the walking puck; adopted as a Mapbox marker at boot -->
-    <div hidden>
+    <!-- pins + walking puck are DOM so they can use real type and the badge art -->
+    <div class="layer" id="pinLayer"></div>
+    <div class="layer" id="puckLayer">
       <div class="puck" id="puck">
         <div class="puck-ring">
           <svg class="puck-figure" viewBox="0 0 24 34" aria-hidden="true">
@@ -37,7 +37,7 @@
     <!-- top chrome -->
     <header class="topbar">
       <a class="wordmark" href="../">Know Your Block</a>
-      <div class="counter" id="counter" aria-live="polite">0 / 20 visited</div>
+      <div class="counter" id="counter" aria-live="polite">0 / 7 visited</div>
     </header>
 
     <!-- iOS-style local notification -->
@@ -72,42 +72,11 @@
 
     <!-- coaching hint -->
     <div class="hint" id="hint">
-      <strong>Tap the map</strong> to walk the block · far-away taps ride the subway · tap a sign for its story
+      <strong>Swipe the map</strong> to walk the block · pinch or scroll to zoom out · tap a sign for the story
     </div>
 
     <!-- demo reset toast -->
     <div class="toast" id="toast" aria-live="polite"></div>
-
-    <!-- ---------- subway ride interstitial ---------- -->
-    <div class="transit" id="transit" hidden aria-live="polite">
-      <div class="transit-scene">
-        <div class="car">
-          <div class="car-windows">
-            <div class="tunnel-lights"></div>
-          </div>
-          <div class="car-wall">
-            <div class="handrail"></div>
-            <div class="strap"></div>
-            <svg class="rider" viewBox="0 0 24 34" aria-hidden="true">
-              <g class="rider-sway">
-                <rect class="fig-limb fig-back r-leg-b" x="11.9" y="18.0" width="3" height="13" rx="1.5"/>
-                <rect class="fig-limb fig-back r-arm-up" x="14.0" y="-1.5" width="2.6" height="11.5" rx="1.3"/>
-                <rect class="fig-torso" x="9.5" y="8.0" width="5" height="11.6" rx="2.5"/>
-                <circle class="fig-head" cx="12" cy="4.1" r="3.6"/>
-                <rect class="fig-limb r-leg-a" x="9.1" y="18.0" width="3" height="13" rx="1.5"/>
-                <rect class="fig-limb r-arm-down" x="7.2" y="8.8" width="2.6" height="10.4" rx="1.3"/>
-              </g>
-            </svg>
-            <div class="car-seats"></div>
-          </div>
-          <div class="car-floor"></div>
-        </div>
-        <div class="transit-caption">
-          <span class="route-bullet">K</span>
-          <span id="transitDest">Riding…</span>
-        </div>
-      </div>
-    </div>
 
     <!-- ---------- story sheet ---------- -->
     <div class="scrim" id="scrim" hidden></div>
@@ -132,15 +101,13 @@
 
         <p class="demo-note">
           Demo build — visits reset 10 seconds after you close a story so the next person can
-          stamp the same sign. Map © Mapbox © OpenStreetMap. Prefer the stylized offline
-          version? <a href="classic/">Classic demo</a>.
+          stamp the same sign.
         </p>
       </div>
     </section>
   </div>
 </div>
 
-<script src="https://api.mapbox.com/mapbox-gl-js/v3.8.0/mapbox-gl.js"></script>
 <script src="data.js"></script>
 <script src="app.js"></script>
 </body>
