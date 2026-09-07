@@ -1,0 +1,103 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<title>KYB Radio — embed playability check</title>
+<style>
+  body { font-family: -apple-system, sans-serif; background: #1a1a1a; color: #f4efe4; padding: 24px; }
+  h1 { font-size: 1.2rem; } .muted { color: #999; font-size: 0.85rem; }
+  table { border-collapse: collapse; margin-top: 16px; width: 100%; max-width: 860px; }
+  td, th { text-align: left; padding: 6px 10px; border-bottom: 1px solid #333; font-size: 0.85rem; }
+  .ok { color: #7ec97e; } .bad { color: #e07a6a; } .swap { color: #e0a83e; } .testing { color: #e0a83e; }
+  #stage { position: fixed; right: 24px; top: 24px; width: 320px; height: 180px; border: 2px solid #e0a83e; border-radius: 8px; overflow: hidden; background: #000; }
+  #stage iframe { width: 100%; height: 100%; }
+  #done { display: none; margin-top: 16px; padding: 12px 16px; background: #2c4a2c; border-radius: 8px; max-width: 828px; }
+</style>
+</head>
+<body>
+<h1>KYB Radio — embed playability check</h1>
+<p class="muted">Each candidate loads muted in a real embedded player (top right). PLAYING = pass; error 101/150 = uploader blocks embedding. Failures fall back to backup candidates automatically. Leave this tab focused until the green banner appears.</p>
+<div id="stage"><div id="p"></div></div>
+<div id="done">✅ Done. If this is running on <b>localhost</b>, results were sent back automatically. Otherwise, copy the results below and paste them back into the chat.<br /><br /><textarea id="out" readonly style="width:100%;height:120px;background:#111;color:#7ec97e;border:1px solid #444;border-radius:6px;font-family:monospace;font-size:11px;"></textarea></div>
+<table><thead><tr><th>Honoree</th><th>Video</th><th>Status</th></tr></thead><tbody id="rows"></tbody></table>
+<script>const CHECK_TRACKS = [{"id": "christopher-wallace-way", "honoree": "Christopher Wallace (The Notorious B.I.G.)", "primary": "_JZom_gVfuw", "candidates": ["_JZom_gVfuw", "7Y8VPQcPHhY", "iy7xuwOMLew", "dpuZwxmU4dM", "_GBxteXJP3g"], "labels": {"_JZom_gVfuw": "The Notorious B.I.G. - Juicy (Official Video) [4K] — The Notorious B.I.G.", "7Y8VPQcPHhY": "Juicy — The Notorious B.I.G.", "iy7xuwOMLew": "Juicy (2007 Remaster) — The Notorious B.I.G.", "dpuZwxmU4dM": "Juicy (2005 Remaster) — The Notorious B.I.G.", "_GBxteXJP3g": "The Notorious B.I.G. - Juicy (Live at MTV Spring Break 1995) (Official — The Notorious B.I.G."}}, {"id": "randy-weston-way", "honoree": "Randy Weston", "primary": "50imypxw7w4", "candidates": ["50imypxw7w4", "FRvZ6Tur9dk", "JL8j6nY_n1k"], "labels": {"50imypxw7w4": "Randy Weston, \"Hi Fly\" (solo 1974) — John MacKay", "FRvZ6Tur9dk": "Randy Weston - Hi Fly — Groovin'High Records", "JL8j6nY_n1k": "Randy Weston with Ron Carter & Jimmy Cobb Play Hi Fly At NEA Jazz Mast — tuntemeke"}}, {"id": "woody-guthrie-way", "honoree": "Woody Guthrie", "primary": "IlaqPRCuRhU", "candidates": ["IlaqPRCuRhU", "wxiMrvDbq3s", "Ol0rRdF5L1c", "XIHvqeHIBdA", "XaI5IRuS2aE"], "labels": {"IlaqPRCuRhU": "This Land Is Your Land — Woody Guthrie - Topic", "wxiMrvDbq3s": "Woody Guthrie- This Land Is Your Land — rutaloot", "Ol0rRdF5L1c": "This Land is Your Land — Woody Guthrie - Topic", "XIHvqeHIBdA": "This Land Is Your Land (2023 Remastered) — Woody Guthrie - Topic", "XaI5IRuS2aE": "Woody Guthrie-This Land Is Your Land — alargedog"}}, {"id": "harry-warren-way", "honoree": "Harry Warren", "primary": "V2aj0zhXlLA", "candidates": ["V2aj0zhXlLA", "p4_nRdqgZ_E", "1kWunNVd9gg", "riV4DYeA-Pw"], "labels": {"V2aj0zhXlLA": "Glenn Miller - Chattanooga Choo Choo - Sun Valley Serenade (1941) HQ — jetiwarrior", "p4_nRdqgZ_E": "Chattanooga Choo Choo - Glenn Miller (Movie Sun Valley Serenade 1941) — 陳柏翰", "1kWunNVd9gg": "Glenn Miller - Chattanooga Choo Choo / I've Got A Gal In Kalamazoo — oct opus", "riV4DYeA-Pw": "Chattanooga Choo-Choo & Moonlight Serenade outro - Glenn Miller Orches — Holly Mills"}}, {"id": "reverend-timothy-wright-way", "honoree": "Reverend Timothy Wright", "primary": "lEIRjQHkWqE", "candidates": ["lEIRjQHkWqE", "Si-5nGEGtzI", "aG1JfiJzGkA", "JW103rJyxGI"], "labels": {"lEIRjQHkWqE": "Rev. Timothy Wright - Trouble Don't Last Always (Lyric Video) — malacomg", "Si-5nGEGtzI": "Timothy Wright - Trouble Don't Last Always — WTGT 103", "aG1JfiJzGkA": "Rev. Timothy Wright  - Trouble Don't  Last Always  — Gospel Music HITS", "JW103rJyxGI": "TROUBLE DON'T LAST ALWAYS — minjcj1961"}}, {"id": "archbishop-roy-e-brown-way", "honoree": "Archbishop Roy E. Brown", "primary": "Gbxlti4xzKc", "candidates": ["Gbxlti4xzKc", "bj0gK57wiHU", "IodmqjlW-mo"], "labels": {"Gbxlti4xzKc": "Archbishop Roy Brown \"FORVER\" Pilgrim Tabernacle Choir of Brooklyn, Ny — GOSPEL851MUSIC", "bj0gK57wiHU": "Archbishop Roy E. Brown Tribute — Pilgrim Church Tv", "IodmqjlW-mo": "The Legacy Vault: Archbishop Roy E. Brown - “A Prayer For Help” — Pilgrim Church Tv"}}, {"id": "bob-marley-boulevard", "honoree": "Bob Marley", "primary": "1ti2YCFgCoI", "candidates": ["1ti2YCFgCoI", "sL_BcaI0i0w", "nw6M3Z8heK0", "AsUYqxMRFiY", "WOvSSC0UsPI", "0pPXOq87atY"], "labels": {"1ti2YCFgCoI": "Bob Marley & The Wailers - Could You Be Loved (Official Music Video) — Bob Marley", "sL_BcaI0i0w": "Could you be loved - Bob Marley (original video) — allsoftware2008", "nw6M3Z8heK0": "Bob Marley and the Wailers - Could You Be Loved (video clip) — nikosy72", "AsUYqxMRFiY": "Bob Marley - Could You Be Loved (Original Music Video) — EL g", "WOvSSC0UsPI": "Bob Marley - Could You Be Loved (Video) HD — William Marley", "0pPXOq87atY": "Bob Marley - Could You Be Loved (¿Puedes ser amad@?) — shilico17"}}, {"id": "duke-ellington-circle", "honoree": "Duke Ellington", "primary": "D6mFGy4g_n8", "candidates": ["D6mFGy4g_n8", "wnurVNkg62Q", "r2G1fKYFgVU", "UOGvJM0SXgw", "aG4Tte6XGkA", "cb2w2m1JmCY"], "labels": {"D6mFGy4g_n8": "Duke Ellington and his Orchestra - Take The A Train (1962) [Official V — StoryvilleRecords", "wnurVNkg62Q": "Duke Ellington Orchestra \"Take The A Train\" 1943 — harryoakley", "r2G1fKYFgVU": "Duke Ellington and His Famous Orchestra - Take the \"A\" Train (Audio) — DukeEllingtonVEVO", "UOGvJM0SXgw": "Duke Ellington  Take The A train  from the film Reveille with Beverly  — John Ishikawa", "aG4Tte6XGkA": "1941 HITS ARCHIVE: Take The “A” Train - Duke Ellington — The78Prof", "cb2w2m1JmCY": "Duke Ellington, \"Take the A Train\" — morrisoncoursevids"}}, {"id": "billie-holiday-place", "honoree": "Billie Holiday", "primary": "mp349H8G0XQ", "candidates": ["mp349H8G0XQ", "Xmb-W1upRAw", "MlxZHePuSOY", "pp9yj5hcWUY", "bKNtP1zOVHw", "9m7WAQE1SOs"], "labels": {"mp349H8G0XQ": "Billie Holiday - God Bless The Child (Audio) — Billie Holiday", "Xmb-W1upRAw": "God Bless The Child — Billie Holiday", "MlxZHePuSOY": "God Bless the Child (Take 1) — Billie Holiday", "pp9yj5hcWUY": "Billie Holiday - God Bless The Child (1955) — alpineinc1", "bKNtP1zOVHw": "God bless the child - Billie Holiday — RiulDoamnei", "9m7WAQE1SOs": "Billie Holiday & Count Basie - God Bless The Child + — eugenecheese"}}, {"id": "leonard-bernstein-place", "honoree": "Leonard Bernstein", "primary": "ovFVC2ZsOc4", "candidates": ["ovFVC2ZsOc4", "bqUgFBSN-w8", "zn5bhJ5YX6U", "422-yb8TXj8", "ixrrhBFWQAU"], "labels": {"ovFVC2ZsOc4": "Leonard Bernstein - Overture to Candide | London Symphony Orchestra /  — Leonard Bernstein", "bqUgFBSN-w8": "Leonard Bernstein - Candide Overture (New York Philharmonic, Lorin Maa — EuroArtsChannel", "zn5bhJ5YX6U": "Bernstein Conducts Overture to Candide, New York Philharmonic — John Randolph", "422-yb8TXj8": "Candide Overture: Leonard Bernstein conducting — Nick", "ixrrhBFWQAU": "OVERTURE to CANDIDE by Leonard Bernstein, conducted by Bernstein {Audi — TheOneAndOnlyZeno"}}, {"id": "joey-ramone-place", "honoree": "Joey Ramone", "primary": "bm51ihfi1p4", "candidates": ["bm51ihfi1p4", "V4RQsPECTdM", "Y0L0jVe0duc", "Eajk2uDWaP0"], "labels": {"bm51ihfi1p4": "Ramones - I Wanna Be Sedated (Official Music Video) — Ramones", "V4RQsPECTdM": "I Wanna Be Sedated — Ramones", "Y0L0jVe0duc": "Ramones - \"I Wanna Be Sedated\" - Road to Ruin — Ramones", "Eajk2uDWaP0": "The Ramones - I wanna be sedated (Official Video - HQ) — Lamed-El Sogan"}}, {"id": "dorothy-maynor-place", "honoree": "Dorothy Maynor", "primary": "cPy8YdbsDnc", "candidates": ["cPy8YdbsDnc", "LrUzssbwegE", "x0vuQv4NQtE", "Dt3DBHUWRuM", "8OEQVL_nH1s"], "labels": {"cPy8YdbsDnc": "DOROTHY MAYNOR - Depuis le jour - LIVE 1940 — operassassin", "LrUzssbwegE": "DOROTHY MAYNOR SINGS  DEPUIS LE JOUR gustav charpentier 1942 — Archiveradio1930", "x0vuQv4NQtE": "Louise, Act III Scene 1: Depuis le jour où je me suis donnée (Live) — Dorothy Maynor - Topic", "Dt3DBHUWRuM": "DOROTHY MAYNOR SINGS   BEAU SOIR claude debussy 1940 — Archiveradio1930", "8OEQVL_nH1s": "DOROTHY MAYNOR SINGS   MY WAY robert dett 1940 — Archiveradio1930"}}, {"id": "louis-armstrong-place", "honoree": "Louis Armstrong", "primary": "rBrd_3VMC3c", "candidates": ["rBrd_3VMC3c", "CaCSuzR4DwM", "2nGKqH26xlg", "VqhCQZaH4Vs", "p42esUHqq8Q"], "labels": {"rBrd_3VMC3c": "Louis Armstrong - What A Wonderful World (Official Video) — Louis Armstrong", "CaCSuzR4DwM": "Louis Armstrong - What A Wonderful World (At The BBC) — Louis Armstrong", "2nGKqH26xlg": "Louis Armstrong - What A Wonderful World (Original Spoken Intro Versio — RoundMidnightTV", "VqhCQZaH4Vs": "Louis Armstrong - What A Wonderful World — Soulful Sounds", "p42esUHqq8Q": "Louis Armstrong - What A Wonderful World — ok4602002"}}, {"id": "run-dmc-way", "honoree": "Run-D.M.C.", "primary": "l-O5IHVhWj0", "candidates": ["l-O5IHVhWj0", "qBiA_po8TYM", "TLGWQfK-6DY"], "labels": {"l-O5IHVhWj0": "RUN DMC - It's Tricky (Official HD Video) — Run DMC", "qBiA_po8TYM": "Run DMC - It's Tricky — Gabriel Zatt Nunes", "TLGWQfK-6DY": "RUN DMC, Jason Nevins - It's Like That (Official HD Video) — Run DMC"}}, {"id": "milt-hinton-place", "honoree": "Milt Hinton", "primary": "e9vicYoVsg0", "candidates": ["e9vicYoVsg0", "4S1HPrk9xXo", "6muTQO6GR30", "pBfEUZPmqfQ", "VcM19bwQDR0", "u__g23oo0r0"], "labels": {"e9vicYoVsg0": "Milt Hinton-Old Man Time — don wolff", "4S1HPrk9xXo": "Old Man Time — Milt Hinton - Topic", "6muTQO6GR30": "Old Man Time — Milt Hinton - Topic", "pBfEUZPmqfQ": "Old Man Time — Milt Hinton - Topic", "VcM19bwQDR0": "OLD MAN TIME - Milt Hinton — John Clayton Jazz", "u__g23oo0r0": "Milt Hinton - Old Man Time — sleepokay"}}, {"id": "phife-dawg-way", "honoree": "Phife Dawg", "primary": "O3pyCGnZzYA", "candidates": ["O3pyCGnZzYA", "shsq6nsXYcg", "D-uV8TGjaGU", "7D_JwgIM-y4"], "labels": {"O3pyCGnZzYA": "A Tribe Called Quest - Can I Kick It? (Official HD Video) — A Tribe Called Quest", "shsq6nsXYcg": "A Tribe Called Quest - Can I Kick It — A Tribe Called Quest", "D-uV8TGjaGU": "A Tribe Called Quest - Can I Kick It? (Official Audio) — A Tribe Called Quest", "7D_JwgIM-y4": "A Tribe Called Quest - Can I Kick It — coffeerefill"}}, {"id": "prodigy-way", "honoree": "Prodigy", "primary": "yoYZf-lBF_U", "candidates": ["yoYZf-lBF_U", "rTKpYJ80OVQ", "79jGN-ZGdbw", "0NUX4tW5pps"], "labels": {"yoYZf-lBF_U": "Mobb Deep - Shook Ones, Pt. II (Official HD Video) — Mobb Deep", "rTKpYJ80OVQ": "Mobb Deep - Shook Ones, Pt. II (Official Audio) — Mobb Deep", "79jGN-ZGdbw": "Mobb Deep - Shook Ones Pt.II | *Best Quality* (1995) — ShadowRAAM", "0NUX4tW5pps": "Mobb Deep - Shook Ones Part II (HD) — rocki369"}}, {"id": "celia-cruz-boulevard", "honoree": "Celia Cruz", "primary": "imeXSRNRMeg", "candidates": ["imeXSRNRMeg", "IfPfsU02Im0", "4ozgPUx93SA", "ibaoNRS1IZA", "0nBFWzpWXuM", "xayJqNPehn0"], "labels": {"imeXSRNRMeg": "?", "IfPfsU02Im0": "Celia Cruz   La Vida Es Un Carnaval   Video Original — Carlos Fernandes", "4ozgPUx93SA": "?", "ibaoNRS1IZA": "Celia Cruz - La vida es un carnaval — Super Sabado Sensacional", "0nBFWzpWXuM": "La Vida Es Un Carnaval - Celia Cruz — 09SourApple", "xayJqNPehn0": "Celia Cruz - La vida es un carnaval — Diego Bascur"}}, {"id": "johnny-pacheco-way", "honoree": "Johnny Pacheco", "primary": "qbVLaYVdET4", "candidates": ["qbVLaYVdET4", "UusCNZPkIVI", "LuqGyeJgT6E", "j68d0QGq3bk", "cx-4GjaY-t4", "3yAytbAHvf4"], "labels": {"qbVLaYVdET4": "Fania All Stars \"Our Latin Thing\" - QuÍtate Tú (Fania All Stars) — Fania Records", "UusCNZPkIVI": "Fania All Stars Live at Cheetah Vol 1 - Quitate Tu — Fania Records", "LuqGyeJgT6E": "Fania All Stars ft Oscar D'Leon, Milly Quezada, El Canario and others  — Fania Records", "j68d0QGq3bk": "Fania All Stars @ The Cheetah Quitate Tu — Joey Vigil", "cx-4GjaY-t4": "Fania All Stars: Live at the Cheetah Vol 1: Quitate Tu — Fania All Stars", "3yAytbAHvf4": "FANIA INTRO Y QUITATE TU.wmv — roberto castro"}}, {"id": "maxine-sullivan-way", "honoree": "Maxine Sullivan", "primary": "mGxdBxcRTN8", "candidates": ["mGxdBxcRTN8", "lYF-d0IqPoU", "y0RA7CV8u4M", "hSwTEb1u8Us", "03zvfUCRUJY", "WgwZszQ4DC0"], "labels": {"mGxdBxcRTN8": "Maxine Sullivan, Loch Lomond, 1939 Film Performance — Alan Eichler", "lYF-d0IqPoU": "1937 HITS ARCHIVE: Loch Lomond - Maxine Sullivan — The78Prof", "y0RA7CV8u4M": "Maxine Sullivan, Loch Lomond,  1937. — The Golden Age 20s", "hSwTEb1u8Us": "Maxine Sullivan - Loch Lomond (1937) — DreaminB", "03zvfUCRUJY": "Maxine Sullivan - Loch Lomond (1937) — Jazz Time with Jarvis X", "WgwZszQ4DC0": "Maxine Sullivan 'Loch Lomond' 1937 78 rpm — OldiesAL"}}, {"id": "donald-byrd-way", "honoree": "Donald Byrd", "primary": "tg3CBBkSss4", "candidates": ["tg3CBBkSss4", "KPbiigFVPgY", "YRyoMxKcXFE", "w2KvM2T40RQ", "Y5ujEFsaInk", "mAzX65ChVT8"], "labels": {"tg3CBBkSss4": "Cristo Redentor (Remastered) — Donald Byrd", "KPbiigFVPgY": "Cristo Redentor — Donald Byrd", "YRyoMxKcXFE": "Cristo Redentor (Remastered) — Donald Byrd", "w2KvM2T40RQ": "Donald Byrd - Cristo Redentor — bystandersmusic", "Y5ujEFsaInk": "Donald Byrd - Cristo Redentor — Praguedive", "mAzX65ChVT8": "Donald Byrd - \"Cristo Redentor\" (A New Perspective - 1963) — Anthony Valente's Jazz Channel"}}, {"id": "big-punisher-way", "honoree": "Big Pun", "primary": "7Xue-dOOLiY", "candidates": ["7Xue-dOOLiY", "pkNpRkuPLtY", "DtGwr4J2kfA", "SyUX33Nnpfg"], "labels": {"7Xue-dOOLiY": "Big Pun - Still Not a Player (Official Video) ft. Joe — Big Pun", "pkNpRkuPLtY": "Still Not a Player — Big Pun", "DtGwr4J2kfA": "Big Pun - I'm Not a Player (Official Video) — Big Pun", "SyUX33Nnpfg": "Big Pun-I'm Not A Playa, I Just Crush Alot — MAGNATEENTERPRISES"}}, {"id": "dj-scott-la-rock-boulevard", "honoree": "Scott La Rock", "primary": "vZY9rg7CAJA", "candidates": ["vZY9rg7CAJA", "vsrOy32nJdI", "MjTwaKZZNsQ", "ARHyp6c7MWc", "MJB5x_Nc-AM", "3kuEkNHTqDQ"], "labels": {"vZY9rg7CAJA": "South Bronx — Boogie Down Productions - Topic", "vsrOy32nJdI": "Boogie Down Productions- South Bronx — nasty94nas", "MjTwaKZZNsQ": "Boogie Down Productions - South Bronx (HQ) — Hip Hop Supremacy", "ARHyp6c7MWc": "Boogie Down Productions- South Bronx — jerudoriginal91", "MJB5x_Nc-AM": "Boogie Down Productions - South Bronx — DigitaL187", "3kuEkNHTqDQ": "Krs-One - South Bronx — shaky145"}}, {"id": "hip-hop-boulevard", "honoree": "Hip hop (at 1520 Sedgwick Avenue)", "primary": "aFhEIlXAAwU", "candidates": ["aFhEIlXAAwU", "gYMkEMCHtJ4", "LQGM7EhXRq8", "ZjuAJCS1Kws", "4kjeWGQ175g"], "labels": {"aFhEIlXAAwU": "The Message (feat. Melle Mel & Duke Bootee) — Grandmaster Flash", "gYMkEMCHtJ4": "Grandmaster Flash & The Furious Five - The Message (Official Video) — UPROXX", "LQGM7EhXRq8": "Grandmaster Flash & The Furious Five - The Message (The Tube, December — Sugarhill Records", "ZjuAJCS1Kws": "Grandmaster Flash and The Furious Five - The Message (Full video) — Mike Wigen", "4kjeWGQ175g": "Grandmaster Flash & The Furious Five - The Message — DavidMusicLover"}}, {"id": "ray-santos-way", "honoree": "Ray Santos", "primary": "hekT7Qj4Jfs", "candidates": ["hekT7Qj4Jfs", "-NPhC02nQmo", "8iXoftRUX-I", "SMmLzA2VGR8"], "labels": {"hekT7Qj4Jfs": "RAY SANTOS ORCHESTRA - SEÑOR MACHITO — hacheromayor", "-NPhC02nQmo": "Afro Latin Jazz Orchestra Turns 10 - Ray Santos: Sunny Ray — Arturo O'Farrill", "8iXoftRUX-I": "Sunny Ray — Machito & His Orchestra - Topic", "SMmLzA2VGR8": "Latin Music Legend Ray Santos — The City University of New York"}}, {"id": "wu-tang-clan-district", "honoree": "Wu-Tang Clan", "primary": "PBwAxmrE194", "candidates": ["PBwAxmrE194", "4yNQ7_7I5aE", "StI8n5I4Fnc", "twa-Q6HRwH8"], "labels": {"PBwAxmrE194": "Wu-Tang Clan - C.R.E.A.M. (Official HD Video - Edited) — Wu-Tang Clan", "4yNQ7_7I5aE": "C.R.E.A.M. (Cash Rules Everything Around Me) (Official Audio) — Wu-Tang Clan", "StI8n5I4Fnc": "Wu-Tang Clan - \"C.R.E.A.M.\" | Live at Sydney Opera House — Sydney Opera House", "twa-Q6HRwH8": "Wu-Tang Clan - C.R.E.A.M (HD) Best Quality! — Brooklyn Zoo"}}, {"id": "bill-hughes-way", "honoree": "Bill Hughes", "primary": "azlRySWhOc8", "candidates": ["azlRySWhOc8", "_jhVGKx0onc", "YN5i9flfmwk", "8FcWW-fMt90", "wE_N0mW1T_A"], "labels": {"azlRySWhOc8": "Count Basie   Corner Pocket — Count Basie", "_jhVGKx0onc": "Corner Pocket (Live) — Count Basie", "YN5i9flfmwk": "Count Basie - Corner Pocket (Stockholm 1962) — Tube Radio", "8FcWW-fMt90": "Count Basie - Corner Pocket — LSZL55", "wE_N0mW1T_A": "\"Corner Pocket\" from the Count Basie songbook. The New York Jazzharmon — New York Jazzharmonic"}}, {"id": "eric-dixon-way", "honoree": "Eric Dixon", "primary": "SCnNegmArQc", "candidates": ["SCnNegmArQc", "EA7yU1h_XCw", "nYJOMUsK2jo", "enijgnO_UA8", "FZOMoIDhXmI", "ha0livtIqYs"], "labels": {"SCnNegmArQc": "?", "EA7yU1h_XCw": "Down for Double - Count Basie — johnnystaccata", "nYJOMUsK2jo": "Count Basie - Japan — johnnystaccata", "enijgnO_UA8": "?", "FZOMoIDhXmI": "Count Basie - Katy — johnnystaccata", "ha0livtIqYs": "Corner Pocket - Count Basie — johnnystaccata"}}];</script>
+<script>
+(function () {
+  "use strict";
+  var results = [];
+  var rowsEl = document.getElementById("rows");
+
+  function addRow(honoree, label, cls, status) {
+    var tr = document.createElement("tr");
+    tr.innerHTML = "<td>" + honoree + "</td><td>" + label + "</td><td class='" + cls + "'>" + status + "</td>";
+    rowsEl.appendChild(tr);
+    tr.scrollIntoView({ block: "nearest" });
+    return tr;
+  }
+
+  var player = null;
+  function testVideo(vid) {
+    return new Promise(function (resolve) {
+      var settled = false;
+      function finish(ok, code) {
+        if (settled) return;
+        settled = true;
+        clearTimeout(timer);
+        try { player.destroy(); } catch (e) {}
+        player = null;
+        var holder = document.createElement("div");
+        holder.id = "p";
+        document.getElementById("stage").appendChild(holder);
+        resolve({ ok: ok, code: code });
+      }
+      var timer = setTimeout(function () { finish(false, "timeout"); }, 20000);
+      player = new YT.Player("p", {
+        width: "320", height: "180", videoId: vid,
+        playerVars: { playsinline: 1 },
+        events: {
+          onReady: function (e) { e.target.mute(); e.target.playVideo(); },
+          onStateChange: function (e) { if (e.data === YT.PlayerState.PLAYING) finish(true, null); },
+          onError: function (e) { finish(false, e.data); }
+        }
+      });
+    });
+  }
+
+  async function run() {
+    for (var t of CHECK_TRACKS) {
+      var chosen = null, primaryOk = false, tried = [];
+      for (var i = 0; i < t.candidates.length; i++) {
+        var vid = t.candidates[i];
+        var isPrimary = vid === t.primary;
+        var label = (isPrimary ? "PRIMARY: " : "backup: ") + t.labels[vid];
+        var row = addRow(t.honoree, label, "testing", "testing…");
+        var r = await testVideo(vid);
+        tried.push({ videoId: vid, ok: r.ok, code: r.code });
+        if (r.ok) {
+          row.lastChild.className = isPrimary ? "ok" : "swap";
+          row.lastChild.textContent = isPrimary ? "OK" : "OK — use as replacement";
+          chosen = vid; primaryOk = isPrimary;
+          break;
+        } else {
+          row.lastChild.className = "bad";
+          row.lastChild.textContent = "blocked (" + r.code + ")";
+        }
+      }
+      results.push({ id: t.id, honoree: t.honoree, primary: t.primary, primaryOk: primaryOk, chosen: chosen, tried: tried });
+    }
+    document.getElementById("done").style.display = "block";
+    var payload = JSON.stringify(results, null, 1);
+    var out = document.getElementById("out");
+    out.value = payload;
+    out.onclick = function () { out.select(); };
+    fetch("/report", { method: "POST", headers: { "Content-Type": "application/json" }, body: payload }).catch(function () {});
+  }
+
+  window.onYouTubeIframeAPIReady = run;
+  var s = document.createElement("script");
+  s.src = "https://www.youtube.com/iframe_api";
+  document.head.appendChild(s);
+})();
+</script>
+</body>
+</html>

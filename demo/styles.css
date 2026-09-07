@@ -1,0 +1,530 @@
+/* Know Your Block — interactive web demo
+   Bold & Civic palette mirrored from the app (BoldCivicPalette.swift):
+   paper #F4EFE4 · ink #1A1A1A · signal red #C0392B · gold #E0A83E */
+
+@font-face {
+  font-family: "KYB Civic Stencil";
+  src: url("assets/fonts/KYBCivicStencil.ttf") format("truetype");
+  font-display: swap;
+}
+@font-face {
+  font-family: "Allerta Stencil";
+  src: url("assets/fonts/AllertaStencil-Regular.ttf") format("truetype");
+  font-display: swap;
+}
+
+:root {
+  --paper: #f4efe4;
+  --ink: #1a1a1a;
+  --red: #c0392b;
+  --gold: #e0a83e;
+  --olive: #c4c19f;
+  --teal: #9fb6ad;
+  --road-minor: #e7e0d0;
+  --road-major: #d8cbac;
+  --on-dark: #f4efe4;
+  --gray-plate: #9a9a9a;
+  --stencil: "KYB Civic Stencil", "Allerta Stencil", "Arial Black", sans-serif;
+  --serif: "Iowan Old Style", Georgia, "Times New Roman", serif;
+  --label: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+  --collect-radius: 40;
+}
+
+* { margin: 0; padding: 0; box-sizing: border-box; -webkit-tap-highlight-color: transparent; }
+
+html, body { height: 100%; }
+
+body {
+  background: #24211c;
+  color: var(--ink);
+  font-family: var(--serif);
+  overflow: hidden;
+  -webkit-font-smoothing: antialiased;
+}
+
+.visually-hidden {
+  position: absolute; width: 1px; height: 1px; overflow: hidden;
+  clip: rect(0 0 0 0); clip-path: inset(50%); white-space: nowrap;
+}
+
+/* ---------- stage ---------- */
+/* Full-bleed on every size: phone, desktop browser, or a landscape touch table. */
+.device { height: 100dvh; width: 100%; }
+.screen {
+  position: relative;
+  width: 100%;
+  height: 100dvh;
+  overflow: hidden;
+  background: var(--paper);
+  touch-action: none;
+  -webkit-user-select: none;
+  user-select: none;
+  cursor: grab;
+}
+.screen.dragging { cursor: grabbing; }
+
+#map { position: absolute; inset: 0; width: 100%; height: 100%; display: block; }
+
+.layer { position: absolute; inset: 0; pointer-events: none; }
+
+/* ---------- street sign pin ---------- */
+.pin {
+  position: absolute;
+  top: 0; left: 0;
+  transform-origin: 50% 100%; /* the pole's foot sits on the coordinate */
+  pointer-events: auto;
+  background: none;
+  border: 0;
+  padding: 0;
+  cursor: pointer;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  will-change: transform;
+}
+.pin:focus-visible { outline: 3px solid var(--red); outline-offset: 6px; border-radius: 10px; }
+
+.sign {
+  position: relative;
+  display: block;
+  transition: transform .55s cubic-bezier(.2, 1.5, .4, 1), filter .45s ease, opacity .45s ease;
+}
+.sign-plate {
+  position: relative;
+  display: grid;
+  place-items: center;
+  background-image: url("assets/sign_plate.png");
+  background-size: cover;
+  background-position: center;
+  border: 1px solid rgba(224, 168, 62, .4);
+  box-shadow: 0 5px 9px rgba(0, 0, 0, .18);
+  transition: transform .55s cubic-bezier(.2, 1.5, .4, 1), border-color .45s ease;
+}
+.sign-name {
+  font-family: var(--stencil);
+  color: var(--on-dark);
+  text-transform: uppercase;
+  text-align: center;
+  line-height: 1.05;
+  letter-spacing: .02em;
+  text-shadow: 0 1px 2px rgba(0, 0, 0, .45);
+  padding: 0 6%;
+}
+.sign-badge-wrap { position: absolute; right: 0; bottom: 0; }
+.sign-badge {
+  display: block;
+  border-radius: 50%;
+  object-fit: cover;
+  background: var(--paper);
+  box-shadow: 0 1px 2px rgba(0, 0, 0, .25);
+  transition: filter .45s ease, opacity .45s ease, box-shadow .45s ease;
+}
+
+/* uncollected = grayscale, dimmed, tilted (matches StreetSignView) */
+.sign.locked { transform: scale(.94); }
+.sign.locked .sign-plate { transform: rotate(-6deg); filter: grayscale(1) brightness(.95); opacity: .82; }
+.sign.locked .sign-badge { filter: grayscale(1); opacity: .85; box-shadow: 0 0 0 var(--badge-ring, 2px) var(--gray-plate), 0 1px 2px rgba(0, 0, 0, .25); }
+.sign:not(.locked) .sign-badge { box-shadow: 0 0 0 var(--badge-ring, 2px) var(--gold), 0 1px 2px rgba(0, 0, 0, .25); }
+.sign:not(.locked) .sign-plate { border-color: rgba(224, 168, 62, .9); }
+
+.pole {
+  width: 5.5px;
+  height: 34px;
+  margin-top: -3px;
+  background: linear-gradient(to right, rgba(26, 26, 26, .6), var(--ink), rgba(26, 26, 26, .75));
+}
+.pole-shadow { width: 18px; height: 5px; margin-top: -1px; border-radius: 50%; background: rgba(0, 0, 0, .16); }
+
+/* gentle pulse on uncollected map pins (easeInOut, matches the app) */
+@keyframes pinPulse {
+  0%, 100% { transform: rotate(-6deg) scale(1); }
+  50%      { transform: rotate(-6deg) scale(1.08); }
+}
+.pin.pulsing .sign.locked .sign-plate { animation: pinPulse 2.8s ease-in-out infinite; }
+
+/* ---------- walking puck ---------- */
+.puck {
+  position: absolute;
+  top: 0; left: 0;
+  width: 54px; height: 54px;
+  display: grid;
+  place-items: center;
+  will-change: transform;
+}
+.puck-ring {
+  position: relative;
+  width: 46px; height: 46px;
+  border-radius: 50%;
+  background: var(--paper);
+  display: grid;
+  place-items: center;
+  box-shadow: 0 0 0 0 rgba(0, 0, 0, .25), 0 0 3px 1px rgba(0, 0, 0, .25);
+}
+.puck-ring::before {
+  content: "";
+  position: absolute;
+  width: 40px; height: 40px;
+  border-radius: 50%;
+  background: var(--ink);
+  border: 2px solid var(--gold);
+}
+.puck-figure {
+  position: relative;
+  height: 26px;
+  width: auto;
+  overflow: visible;
+}
+.puck.flip .puck-figure { transform: scaleX(-1); }
+
+.fig-head, .fig-torso, .fig-limb { fill: var(--gold); }
+.fig-back { opacity: .5; }
+.fig-limb { transform-box: fill-box; }
+.arm-a, .arm-b { transform-origin: 50% 6%; }
+.leg-a, .leg-b { transform-origin: 50% 4%; }
+.fig-bob { transform-box: fill-box; transform-origin: 50% 85%; }
+
+/* a real two-beat walk cycle: opposite arm and leg swing together, and the body leans
+   into each stride the way the app's two walk frames do */
+@keyframes limbSwingA { 0%, 100% { transform: rotate(34deg); } 50% { transform: rotate(-34deg); } }
+@keyframes limbSwingB { 0%, 100% { transform: rotate(-34deg); } 50% { transform: rotate(34deg); } }
+@keyframes armSwingA { 0%, 100% { transform: rotate(-24deg); } 50% { transform: rotate(24deg); } }
+@keyframes armSwingB { 0%, 100% { transform: rotate(24deg); } 50% { transform: rotate(-24deg); } }
+@keyframes bodyBob {
+  0%, 100% { transform: translateY(0) rotate(-6deg); }
+  25%      { transform: translateY(-1.1px) rotate(0deg); }
+  50%      { transform: translateY(0) rotate(7deg); }
+  75%      { transform: translateY(-1.1px) rotate(0deg); }
+}
+
+.puck.walking .leg-a { animation: limbSwingA var(--cycle, .62s) ease-in-out infinite; }
+.puck.walking .leg-b { animation: limbSwingB var(--cycle, .62s) ease-in-out infinite; }
+.puck.walking .arm-a { animation: armSwingB var(--cycle, .62s) ease-in-out infinite; }
+.puck.walking .arm-b { animation: armSwingA var(--cycle, .62s) ease-in-out infinite; }
+.puck.walking .fig-bob { animation: bodyBob var(--cycle, .62s) ease-in-out infinite; }
+/* idle drops every limb back to the standing pose rather than freezing mid-stride */
+.puck:not(.walking) .fig-limb, .puck:not(.walking) .fig-bob { animation: none; }
+
+/* ---------- top chrome ---------- */
+.topbar {
+  position: absolute;
+  top: 0; left: 0; right: 0;
+  padding: max(14px, env(safe-area-inset-top)) 18px 12px;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  background: linear-gradient(to bottom, rgba(244, 239, 228, .95), rgba(244, 239, 228, 0));
+  pointer-events: none;
+}
+.wordmark {
+  font-family: var(--stencil);
+  font-size: 17px;
+  letter-spacing: .06em;
+  text-transform: uppercase;
+  color: var(--ink);
+  text-decoration: none;
+  pointer-events: auto; /* the topbar itself is click-through so the map stays draggable */
+}
+.wordmark:hover { color: var(--red); }
+.counter {
+  font-family: var(--label);
+  font-size: 10.5px;
+  font-weight: 600;
+  letter-spacing: 1.1px;
+  text-transform: uppercase;
+  color: rgba(26, 26, 26, .55);
+  background: rgba(244, 239, 228, .9);
+  border: 1px solid rgba(26, 26, 26, .14);
+  border-radius: 999px;
+  padding: 5px 11px;
+}
+
+/* ---------- notification ---------- */
+.notif {
+  position: absolute;
+  top: calc(max(14px, env(safe-area-inset-top)) + 44px);
+  left: 12px; right: 12px;
+  max-width: 460px;
+  margin-inline: auto;
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 12px 14px;
+  border-radius: 18px;
+  background: rgba(30, 28, 25, .92);
+  -webkit-backdrop-filter: blur(14px);
+  backdrop-filter: blur(14px);
+  color: var(--on-dark);
+  box-shadow: 0 12px 30px rgba(0, 0, 0, .35);
+  transform: translateY(-140%);
+  opacity: 0;
+  transition: transform .42s cubic-bezier(.2, .9, .3, 1.2), opacity .3s ease;
+  pointer-events: none;
+  cursor: pointer;
+  z-index: 6;
+}
+.notif.show { transform: translateY(0); opacity: 1; pointer-events: auto; }
+.notif-icon { width: 34px; height: 34px; border-radius: 9px; flex: none; }
+.notif-copy { min-width: 0; }
+.notif-title {
+  font-family: var(--label);
+  font-size: 14px;
+  font-weight: 700;
+  line-height: 1.25;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.notif-body { font-family: var(--label); font-size: 13px; opacity: .75; }
+
+/* ---------- nearest peek HUD ---------- */
+.peek {
+  position: absolute;
+  left: 12px; right: 12px;
+  max-width: 460px;
+  margin-inline: auto;
+  bottom: calc(max(16px, env(safe-area-inset-bottom)) + 52px);
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 11px 14px;
+  border-radius: 14px;
+  background: rgba(244, 239, 228, .94);
+  border: 1px solid rgba(26, 26, 26, .14);
+  box-shadow: 0 8px 22px rgba(0, 0, 0, .16);
+  pointer-events: none;
+}
+.peek-arrow svg { width: 20px; height: 20px; fill: var(--red); display: block; }
+.peek-arrow { transition: transform .18s linear; }
+.peek-name { font-family: var(--stencil); font-size: 14px; text-transform: uppercase; letter-spacing: .03em; }
+.peek-dist {
+  font-family: var(--label);
+  font-size: 10.5px;
+  font-weight: 600;
+  letter-spacing: 1.1px;
+  text-transform: uppercase;
+  color: rgba(26, 26, 26, .5);
+}
+.peek.in-range .peek-dist { color: var(--red); }
+
+/* ---------- hint + toast ---------- */
+.hint {
+  position: absolute;
+  left: 12px; right: 12px;
+  max-width: 460px;
+  margin-inline: auto;
+  bottom: max(16px, env(safe-area-inset-bottom));
+  text-align: center;
+  font-family: var(--label);
+  font-size: 12px;
+  color: rgba(26, 26, 26, .6);
+  background: rgba(244, 239, 228, .82);
+  border-radius: 999px;
+  padding: 8px 12px;
+  transition: opacity .5s ease;
+  pointer-events: none;
+}
+.hint strong { color: var(--red); }
+.hint.gone { opacity: 0; }
+
+.toast {
+  position: absolute;
+  left: 50%;
+  bottom: calc(max(16px, env(safe-area-inset-bottom)) + 110px);
+  transform: translate(-50%, 12px);
+  max-width: 88%;
+  padding: 9px 14px;
+  border-radius: 999px;
+  background: rgba(26, 26, 26, .9);
+  color: var(--on-dark);
+  font-family: var(--label);
+  font-size: 12px;
+  letter-spacing: .2px;
+  opacity: 0;
+  transition: opacity .25s ease, transform .25s ease;
+  pointer-events: none;
+  z-index: 7;
+  text-align: center;
+}
+.toast.show { opacity: 1; transform: translate(-50%, 0); }
+
+/* ---------- story sheet ---------- */
+.scrim {
+  position: absolute; inset: 0;
+  background: rgba(20, 18, 15, .45);
+  opacity: 0;
+  transition: opacity .3s ease;
+  z-index: 8;
+}
+.scrim.show { opacity: 1; }
+
+.sheet {
+  position: absolute;
+  left: 0; right: 0; bottom: 0;
+  width: 100%;
+  max-width: 600px;
+  margin-inline: auto; /* the story always opens centred, whatever the screen width */
+  height: 94%;
+  background: var(--paper);
+  border-radius: 22px 22px 0 0;
+  box-shadow: 0 -10px 40px rgba(0, 0, 0, .3);
+  transform: translateY(100%);
+  transition: transform .38s cubic-bezier(.2, .8, .25, 1);
+  z-index: 9;
+  display: flex;
+  flex-direction: column;
+}
+.sheet.show { transform: translateY(0); }
+.sheet[hidden], .scrim[hidden], .peek[hidden] { display: none; }
+.sheet-grabber {
+  width: 38px; height: 5px;
+  border-radius: 3px;
+  background: rgba(26, 26, 26, .22);
+  margin: 8px auto 0;
+  flex: none;
+}
+.sheet-scroll {
+  overflow-y: auto;
+  padding: 8px 24px calc(40px + env(safe-area-inset-bottom));
+}
+
+.icon-btn {
+  width: 40px; height: 40px;
+  border-radius: 50%;
+  border: 1px solid rgba(26, 26, 26, .14);
+  background: rgba(255, 255, 255, .6);
+  display: grid;
+  place-items: center;
+  cursor: pointer;
+}
+.icon-btn svg { width: 15px; height: 15px; stroke: var(--ink); stroke-width: 2; fill: none; stroke-linecap: round; }
+
+.hero { display: grid; place-items: center; padding: 18px 0 26px; }
+
+/* hero sign "stamp slam" — badge drops from raised + cocked, sign flinches on impact */
+@keyframes stampSlam {
+  0%   { transform: scale(3) rotate(-9deg); }
+  55%  { transform: scale(2.55) rotate(-7deg); }
+  100% { transform: scale(1) rotate(0deg); }
+}
+@keyframes impactJolt {
+  0%, 100% { transform: scale(1); }
+  40%      { transform: scale(.95); }
+}
+.sign.slamming .sign-badge { animation: stampSlam .34s cubic-bezier(.7, 0, .95, .4) both; }
+.sign.jolting { animation: impactJolt .3s ease-out .34s both; }
+
+.record {
+  border-top: 1px solid rgba(26, 26, 26, .25);
+  border-bottom: 1px solid rgba(26, 26, 26, .25);
+  padding: 4px 0;
+}
+.record-row {
+  display: flex;
+  gap: 14px;
+  padding: 10px 0;
+  border-bottom: 1px solid rgba(26, 26, 26, .08);
+}
+.record-row:last-child { border-bottom: 0; }
+.record-row dt {
+  flex: none;
+  width: 88px;
+  font-family: var(--label);
+  font-size: 10.5px;
+  font-weight: 600;
+  letter-spacing: 1.3px;
+  text-transform: uppercase;
+  color: rgba(26, 26, 26, .5);
+  padding-top: 3px;
+}
+.record-row dd { font-size: 15px; line-height: 1.45; color: rgba(26, 26, 26, .85); }
+.record-row dd.red { color: var(--red); }
+.record-row dd.faint { color: rgba(26, 26, 26, .55); }
+
+.visit-btn {
+  display: block;
+  width: 100%;
+  margin: 22px 0 4px;
+  padding: 16px;
+  border: 0;
+  border-radius: 10px;
+  background: var(--red);
+  color: var(--on-dark);
+  font-family: var(--stencil);
+  font-size: 16px;
+  letter-spacing: .06em;
+  text-transform: uppercase;
+  cursor: pointer;
+}
+.visit-btn:active { transform: scale(.985); }
+
+.locked-box {
+  margin: 22px 0 4px;
+  padding: 16px;
+  border-radius: 10px;
+  border: 1.2px dashed rgba(26, 26, 26, .35);
+  text-align: center;
+}
+.locked-box .lb-title {
+  font-family: var(--stencil);
+  font-size: 14px;
+  text-transform: uppercase;
+  letter-spacing: .05em;
+  opacity: .55;
+}
+.locked-box .lb-sub { font-size: 13.5px; opacity: .55; margin-top: 4px; }
+
+.section-head {
+  font-family: var(--label);
+  font-size: 13px;
+  font-weight: 600;
+  letter-spacing: 1.8px;
+  text-transform: uppercase;
+  color: var(--red);
+  margin: 28px 0 12px;
+}
+.story p { font-size: 16px; line-height: 1.65; margin-bottom: 16px; }
+
+.links a {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  color: var(--red);
+  text-decoration: none;
+  font-family: var(--label);
+  font-size: 15px;
+  padding: 9px 0;
+}
+.links a svg { width: 13px; height: 13px; stroke: var(--red); stroke-width: 2.2; fill: none; stroke-linecap: round; stroke-linejoin: round; }
+
+.demo-note {
+  margin-top: 30px;
+  font-family: var(--label);
+  font-size: 12px;
+  line-height: 1.55;
+  color: rgba(26, 26, 26, .45);
+  border-top: 1px solid rgba(26, 26, 26, .08);
+  padding-top: 14px;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  * { animation-duration: .01ms !important; animation-iteration-count: 1 !important; transition-duration: .01ms !important; }
+  .puck .fig-limb, .puck .fig-bob { animation: none !important; }
+}
+
+/* ---------- wide screens: desktop browser and landscape touch tables ---------- */
+@media (min-width: 860px) {
+  .topbar { padding-inline: 28px; }
+  .wordmark { font-size: 21px; }
+  .sheet {
+    left: 0; right: 0;
+    width: min(600px, 92vw);
+    bottom: 26px;
+    height: min(860px, calc(100dvh - 52px));
+    border-radius: 22px;
+    transform: translateY(calc(100% + 30px));
+  }
+  .sheet.show { transform: translateY(0); }
+  .sheet-scroll { padding-inline: 34px; }
+  .notif, .peek, .hint { max-width: 520px; }
+}

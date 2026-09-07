@@ -1,0 +1,104 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>Know Your Block — Interactive Demo</title>
+<meta name="description" content="A browser demo of Know Your Block: walk a stylized NYC map, find honorary street signs, read the story, stamp the sign as visited.">
+<link rel="icon" href="assets/favicon-64.png">
+<link rel="stylesheet" href="styles.css">
+</head>
+<body>
+
+<div class="device">
+  <!-- ---------- map screen ---------- -->
+  <div class="screen" id="screen">
+    <canvas id="map"></canvas>
+
+    <!-- pins + walking puck are DOM so they can use real type and the badge art -->
+    <div class="layer" id="pinLayer"></div>
+    <div class="layer" id="puckLayer">
+      <div class="puck" id="puck">
+        <div class="puck-ring">
+          <svg class="puck-figure" viewBox="0 0 24 34" aria-hidden="true">
+            <g class="fig-bob">
+              <rect class="fig-limb fig-back leg-b" x="11.9" y="18.0" width="3" height="13" rx="1.5"/>
+              <rect class="fig-limb fig-back arm-b" x="14.2" y="8.8" width="2.6" height="10.4" rx="1.3"/>
+              <rect class="fig-torso" x="9.5" y="8.0" width="5" height="11.6" rx="2.5"/>
+              <circle class="fig-head" cx="12" cy="4.1" r="3.6"/>
+              <rect class="fig-limb leg-a" x="9.1" y="18.0" width="3" height="13" rx="1.5"/>
+              <rect class="fig-limb arm-a" x="7.2" y="8.8" width="2.6" height="10.4" rx="1.3"/>
+            </g>
+          </svg>
+        </div>
+      </div>
+    </div>
+
+    <!-- top chrome -->
+    <header class="topbar">
+      <a class="wordmark" href="../">Know Your Block</a>
+      <div class="counter" id="counter" aria-live="polite">0 / 7 visited</div>
+    </header>
+
+    <!-- iOS-style local notification -->
+    <div class="notif" id="notif" role="button" tabindex="0" aria-live="assertive">
+      <img class="notif-icon" src="assets/favicon-64.png" alt="">
+      <div class="notif-copy">
+        <div class="notif-title" id="notifTitle"></div>
+        <div class="notif-body">Tap to visit.</div>
+      </div>
+    </div>
+
+    <!-- nearest-icon HUD -->
+    <div class="peek" id="peek" hidden>
+      <div class="peek-arrow" id="peekArrow" aria-hidden="true">
+        <svg viewBox="0 0 24 24"><path d="M12 2 22 22 12 17 2 22z"/></svg>
+      </div>
+      <div class="peek-copy">
+        <div class="peek-name" id="peekName"></div>
+        <div class="peek-dist" id="peekDist"></div>
+      </div>
+    </div>
+
+    <!-- coaching hint -->
+    <div class="hint" id="hint">
+      <strong>Swipe the map</strong> to walk the block · tap a sign to read the story
+    </div>
+
+    <!-- demo reset toast -->
+    <div class="toast" id="toast" aria-live="polite"></div>
+
+    <!-- ---------- story sheet ---------- -->
+    <div class="scrim" id="scrim" hidden></div>
+    <section class="sheet" id="sheet" role="dialog" aria-modal="true" aria-labelledby="sheetName" hidden>
+      <div class="sheet-grabber" aria-hidden="true"></div>
+      <div class="sheet-scroll" id="sheetScroll">
+        <button class="icon-btn" id="closeBtn" aria-label="Close">
+          <svg viewBox="0 0 24 24"><path d="M5 5l14 14M19 5 5 19"/></svg>
+        </button>
+
+        <div class="hero" id="hero"></div>
+        <h1 class="visually-hidden" id="sheetName"></h1>
+
+        <dl class="record" id="record"></dl>
+
+        <div id="collectArea"></div>
+
+        <h2 class="section-head">The Story</h2>
+        <div class="story" id="story"></div>
+
+        <div id="linksArea"></div>
+
+        <p class="demo-note">
+          Demo build — visits reset 10 seconds after you close a story so the next person can
+          stamp the same sign.
+        </p>
+      </div>
+    </section>
+  </div>
+</div>
+
+<script src="data.js"></script>
+<script src="app.js"></script>
+</body>
+</html>

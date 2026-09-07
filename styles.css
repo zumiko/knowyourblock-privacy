@@ -92,6 +92,15 @@ nav.top a {
   font-size: 0.95rem;
 }
 nav.top a:hover { color: var(--red); }
+nav.top a.demo {
+  color: var(--red);
+  border: 1px solid rgba(192, 57, 43, 0.4);
+  border-radius: 999px;
+  padding: 5px 13px;
+  white-space: nowrap;
+}
+nav.top a.demo .short { display: none; }
+nav.top a.demo:hover { background: var(--red); color: var(--paper); border-color: var(--red); }
 nav.top a.badge-link { line-height: 0; }
 nav.top img.badge { height: 34px; }
 
@@ -285,6 +294,7 @@ footer.site a { color: var(--gold); text-decoration: none; }
 footer.site a:hover { text-decoration: underline; }
 footer.site .cols { display: flex; gap: 28px; flex-wrap: wrap; }
 footer.site .fine { margin-top: 16px; font-size: 0.85rem; color: rgba(244, 239, 228, 0.5); max-width: 70ch; }
+footer.site .footer-mark { border-radius: 12px; }
 
 /* ---------- legal pages ---------- */
 .legal { padding: 56px 0 80px; max-width: 780px; }
@@ -306,5 +316,10 @@ footer.site .fine { margin-top: 16px; font-size: 0.85rem; color: rgba(244, 239, 
 @media (max-width: 560px) {
   .feature-grid, .steps, .shots { grid-template-columns: 1fr; }
   nav.top a.text { display: none; }
+  /* the demo link survives the small-screen nav cull — it works on a phone */
+  nav.top { gap: 12px; }
+  nav.top a.demo { font-size: 0.85rem; padding: 5px 11px; }
+  nav.top a.demo .long { display: none; }
+  nav.top a.demo .short { display: inline; }
   footer.site .wrap { grid-template-columns: 1fr; }
 }
