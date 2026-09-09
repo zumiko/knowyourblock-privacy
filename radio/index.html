@@ -1,0 +1,144 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>KYB Radio — The sounds behind the street signs</title>
+  <meta name="description" content="A listening station for NYC's honorary street names: 28 musical icons with streets named after them across all five boroughs, from Biggie to Billie Holiday to Celia Cruz. Tune in by borough." />
+
+  <link rel="canonical" href="https://knowyourblock.nyc/radio/" />
+
+  <!-- Open Graph -->
+  <meta property="og:type" content="website" />
+  <meta property="og:title" content="KYB Radio — The sounds behind NYC's street signs" />
+  <meta property="og:description" content="28 musical icons with NYC streets named after them, one continuous broadcast. Tune in by borough." />
+  <meta property="og:image" content="https://knowyourblock.nyc/assets/img/og-image.png" />
+  <meta property="og:url" content="https://knowyourblock.nyc/radio/" />
+
+  <!-- Twitter / X -->
+  <meta name="twitter:card" content="summary_large_image" />
+  <meta name="twitter:title" content="KYB Radio — The sounds behind NYC's street signs" />
+  <meta name="twitter:description" content="28 musical icons with NYC streets named after them, one continuous broadcast. Tune in by borough." />
+  <meta name="twitter:image" content="https://knowyourblock.nyc/assets/img/og-image.png" />
+
+  <link rel="icon" type="image/png" sizes="32x32" href="../assets/img/favicon-32.png" />
+  <link rel="icon" type="image/png" sizes="64x64" href="../assets/img/favicon-64.png" />
+  <link rel="apple-touch-icon" href="../assets/img/apple-touch-icon.png" />
+  <link rel="stylesheet" href="../styles.css" />
+  <link rel="stylesheet" href="./radio.css?v=9" />
+</head>
+<body>
+
+<header class="site">
+  <div class="wrap">
+    <a class="brand" href="../index.html">
+      <img src="../assets/img/favicon-64.png" alt="" width="34" height="34" />
+      <span>Know Your Block</span>
+    </a>
+    <nav class="top">
+      <a class="demo" href="../demo/"><span class="long">Try the demo</span><span class="short">Demo</span></a>
+      <a class="text" href="../index.html#features">Features</a>
+      <a class="text" href="../index.html#how">How it works</a>
+      <a class="text on-air-link" href="./" aria-current="page">Radio</a>
+      <a class="badge-link" href="https://apps.apple.com/us/app/knowyourblock/id6797319245" aria-label="Download on the App Store">
+        <img class="badge" src="../assets/img/appstore-badge.svg" alt="Download on the App Store" />
+      </a>
+    </nav>
+  </div>
+</header>
+
+<main class="radio-room">
+  <div class="wrap-wide">
+    <div class="set-grid">
+
+      <!-- ================= THE RADIO ================= -->
+      <div class="console" role="region" aria-label="KYB Radio player">
+
+        <div class="nameplate">
+          <span class="on-air" aria-hidden="true"></span>
+          <span class="plate-name">KYB Radio</span>
+          <span class="plate-sub">The sounds behind the street signs</span>
+        </div>
+
+        <div class="tuner" role="tablist" aria-label="Choose a channel">
+          <div class="band" id="dial"></div>
+          <div class="needle" id="needle" aria-hidden="true"></div>
+        </div>
+
+        <div class="console-body">
+          <div class="grille" aria-hidden="true"></div>
+          <div class="screen-frame">
+            <div id="player"></div>
+            <div class="start-screen" id="startScreen">
+              <button class="start-broadcast" id="startBtn" type="button">
+                <span class="start-dot" aria-hidden="true"></span>
+                Start the broadcast
+              </button>
+            </div>
+            <div class="playback-lock" aria-hidden="true"></div>
+            <div class="announcer-waveform" aria-hidden="true">
+              <span></span><span></span><span></span><span></span>
+              <span></span><span></span><span></span><span></span>
+              <span></span><span></span><span></span><span></span>
+              <span></span><span></span><span></span><span></span>
+            </div>
+          </div>
+          <div class="grille" aria-hidden="true"></div>
+        </div>
+
+        <div class="controls">
+          <div class="knob" id="tuneKnob" aria-hidden="true"><div class="knob-notch"></div></div>
+          <div class="keys">
+            <button id="prevBtn" type="button" aria-label="Previous track">&#9198; Prev</button>
+            <button id="nextBtn" type="button" aria-label="Next track">Next &#9197;</button>
+            <button id="shuffleBtn" type="button" aria-pressed="false" aria-label="Toggle shuffle">&#128256; Shuffle</button>
+          </div>
+          <span class="station-id" id="stationId">KYB · ALL CITY</span>
+        </div>
+      </div>
+
+      <!-- ================= NOW PLAYING ================= -->
+      <aside class="now-playing" aria-live="polite">
+        <span class="np-tag">Now playing</span>
+        <div class="np-head">
+          <img class="np-badge" id="npBadge" src="" alt="" width="96" height="96" />
+          <div>
+            <h2 class="np-honoree" id="npHonoree">&nbsp;</h2>
+            <p class="np-song" id="npSong">&nbsp;</p>
+          </div>
+        </div>
+        <div class="np-sign">
+          <div class="np-sign-inner" id="npStreet">&nbsp;</div>
+        </div>
+        <p class="np-place" id="npPlace">&nbsp;</p>
+        <p class="np-story" id="npStory">&nbsp;</p>
+        <p class="np-app">Walk there and collect the sign in the <a href="https://apps.apple.com/us/app/knowyourblock/id6797319245">Know Your Block app</a>.</p>
+      </aside>
+
+    </div>
+
+    <p class="fine-print">All music plays through YouTube's embedded player from its original uploaders — Know Your Block hosts no recordings, and all rights remain with the artists and rights holders. Honoree stories are curated from NYC Council co-naming records and public sources.</p>
+  </div>
+</main>
+
+<footer class="site">
+  <div class="wrap">
+    <div>
+      <div class="cols">
+        <a href="../index.html">Home</a>
+        <a href="https://apps.apple.com/us/app/knowyourblock/id6797319245">App Store</a>
+        <a href="../privacy.html">Privacy Policy</a>
+        <a href="../terms.html">Terms of Service</a>
+        <a href="mailto:clairesjellison@gmail.com">Support</a>
+      </div>
+      <p class="fine">© 2026 Claire Jellison &amp; Alston Drew Devero Belfon. Know Your Block is an independent project, not affiliated with the City of New York, any honoree's estate, or YouTube. Videos are embedded from and play on YouTube.</p>
+    </div>
+    <img src="../assets/img/apple-touch-icon.png" alt="" width="56" height="56" style="border-radius:12px" />
+  </div>
+</footer>
+
+<script src="../assets/radio-data.js"></script>
+<script src="./announcer-manifest.js?v=2"></script>
+<script src="./radio.js?v=8"></script>
+</body>
+</html>

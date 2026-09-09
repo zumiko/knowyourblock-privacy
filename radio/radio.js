@@ -24,7 +24,24 @@
     shuffle: false,
     started: false,   // user has pressed Start (autoplay is allowed after a gesture)
     player: null,
-    playerReady: false
+    playerReady: false,
+    announcerEnabled: true,
+    announcerAudio: null,
+    announcerBusy: false,
+    playbackToken: 0,
+    pendingTrack: null,
+    pendingPlayback: null,
+    navigationTimer: null,
+    errorTimer: null,
+    cueTimer: null
+  };
+
+  var ANNOUNCER_CONFIG = {
+    enabled: true,
+    basePath: "./announcer/",
+    defaultVoice: "NYC Radio MC",
+    variantsPerTrack: 4,
+    fallbackToTrackImmediately: true
   };
 
   var els = {
@@ -33,6 +50,7 @@
     tuneKnob: document.getElementById("tuneKnob"),
     stationId: document.getElementById("stationId"),
     startBtn: document.getElementById("startBtn"),
+    startScreen: document.getElementById("startScreen"),
     prevBtn: document.getElementById("prevBtn"),
     nextBtn: document.getElementById("nextBtn"),
     shuffleBtn: document.getElementById("shuffleBtn"),
@@ -41,7 +59,8 @@
     npSong: document.getElementById("npSong"),
     npStreet: document.getElementById("npStreet"),
     npPlace: document.getElementById("npPlace"),
-    npStory: document.getElementById("npStory")
+    npStory: document.getElementById("npStory"),
+    screenFrame: document.querySelector(".screen-frame")
   };
 
   function tracksFor(channel) {
@@ -71,12 +90,13 @@
   }
 
   function setChannel(channel, opts) {
+    if (state.started) cancelPendingPlayback();
     state.channel = channel;
     state.queue = state.shuffle ? shuffled(tracksFor(channel)) : tracksFor(channel);
     state.index = 0;
     els.stationId.textContent = channel.stationId;
     if (!(opts && opts.keepHash)) {
-      history.replaceState(null, "", channel.name === "All City" ? "radio.html" : "radio.html#" + channelSlug(channel));
+      history.replaceState(null, "", channel.name === "All City" ? "./" : "./#" + channelSlug(channel));
     }
     renderDial();
     tuneHardware();
@@ -100,7 +120,7 @@
   }
 
   function renderNowPlaying(track) {
-    els.npBadge.src = track.badge;
+    els.npBadge.src = track.badge.indexOf("../") === 0 ? track.badge : "../" + track.badge;
     els.npBadge.alt = "Illustrated portrait badge of " + track.honoree;
     els.npHonoree.textContent = track.honoree;
     els.npSong.textContent = track.songTitle;
@@ -116,15 +136,162 @@
     if (!track) return;
     renderNowPlaying(track);
     if (state.started && state.playerReady) {
-      if (play) state.player.loadVideoById(track.youtubeId);
+      if (play) scheduleTrackPlayback(track);
       else state.player.cueVideoById(track.youtubeId);
     }
   }
 
+  function setPlaybackLocked(locked) {
+    els.screenFrame.classList.toggle("playback-locked", locked);
+  }
+
+  // -------- announcer flow (pre-generated ElevenLabs clips) --------
+  // Planned behavior:
+  // 1) choose next track
+  // 2) validate it is playable in the embedded player before announcing
+  // 3) choose a pre-generated mp3 variant from ./announcer/<track-id>-<n>.mp3
+  // 4) play the announcement
+  // 5) then load the YouTube video
+  // This keeps costs low by generating a small bank of scripts once instead of
+  // calling ElevenLabs on every track change.
+  function announcementFilesFor(track) {
+    if (!track || !track.id) return [];
+    if (track.announcementFiles && track.announcementFiles.length) return track.announcementFiles;
+
+    var manifest = window.KYB_ANNOUNCER_MANIFEST || [];
+    var entry = manifest.find(function (item) { return item.id === track.id; });
+    if (entry && entry.files && entry.files.length) return entry.files;
+    return [];
+  }
+
+  function randomAnnouncementFile(track) {
+    var files = announcementFilesFor(track);
+    if (!files.length) return null;
+    return files[Math.floor(Math.random() * files.length)];
+  }
+
+  function playAnnouncement(track, onComplete) {
+    if (!ANNOUNCER_CONFIG.enabled || state.announcerBusy) {
+      if (onComplete) onComplete();
+      return;
+    }
+
+    var file = randomAnnouncementFile(track);
+    if (!file) {
+      if (onComplete) onComplete();
+      return;
+    }
+
+    state.announcerBusy = true;
+    var audio = new Audio(file);
+    state.announcerAudio = audio;
+    audio.preload = "auto";
+    audio.onended = function () {
+      state.announcerBusy = false;
+      state.announcerAudio = null;
+      if (onComplete) onComplete();
+    };
+    audio.onerror = function () {
+      state.announcerBusy = false;
+      state.announcerAudio = null;
+      if (onComplete) onComplete();
+    };
+
+    audio.play().catch(function () {
+      state.announcerBusy = false;
+      state.announcerAudio = null;
+      if (onComplete) onComplete();
+    });
+  }
+
+  function cancelPendingPlayback() {
+    state.playbackToken += 1;
+    state.pendingTrack = null;
+    state.pendingPlayback = null;
+
+    if (state.navigationTimer) {
+      clearTimeout(state.navigationTimer);
+      state.navigationTimer = null;
+    }
+    if (state.errorTimer) {
+      clearTimeout(state.errorTimer);
+      state.errorTimer = null;
+    }
+    if (state.cueTimer) {
+      clearInterval(state.cueTimer);
+      state.cueTimer = null;
+    }
+
+    if (state.announcerAudio) {
+      state.announcerAudio.onended = null;
+      state.announcerAudio.onerror = null;
+      state.announcerAudio.pause();
+      state.announcerAudio.currentTime = 0;
+      state.announcerAudio = null;
+    }
+    state.announcerBusy = false;
+
+    if (state.playerReady) state.player.pauseVideo();
+  }
+
+  function scheduleTrackPlayback(track) {
+    if (!track || !state.playerReady) return;
+    if (state.navigationTimer) clearTimeout(state.navigationTimer);
+    setPlaybackLocked(true);
+    state.navigationTimer = setTimeout(function () {
+      state.navigationTimer = null;
+      requestTrackPlayback(track);
+    }, 250);
+  }
+
+  function requestTrackPlayback(track) {
+    if (!track || !state.playerReady) return;
+
+    var token = ++state.playbackToken;
+    state.pendingTrack = track;
+    setPlaybackLocked(true);
+    state.pendingPlayback = function () {
+      if (token !== state.playbackToken || state.pendingTrack !== track) return;
+
+      playAnnouncement(track, function () {
+        if (token !== state.playbackToken || state.pendingTrack !== track) return;
+        state.pendingTrack = null;
+        setPlaybackLocked(false);
+        state.player.playVideo();
+      });
+    };
+    state.player.cueVideoById(track.youtubeId);
+
+    // Some embedded-player versions reach CUED without emitting onStateChange,
+    // and slower connections can take longer than one event cycle to buffer.
+    var cueDeadline = Date.now() + 10000;
+    state.cueTimer = setInterval(function () {
+      var playerState = state.player.getPlayerState();
+      var videoData = state.player.getVideoData();
+      var isReady = videoData && videoData.isPlayable === true && playerState !== YT.PlayerState.BUFFERING;
+      if (state.pendingPlayback && isReady) {
+        clearInterval(state.cueTimer);
+        state.cueTimer = null;
+        var pendingPlayback = state.pendingPlayback;
+        state.pendingPlayback = null;
+        pendingPlayback();
+      }
+      if (Date.now() >= cueDeadline) {
+        clearInterval(state.cueTimer);
+        state.cueTimer = null;
+      }
+    }, 200);
+
+    // onStateChange receives CUED only after YouTube accepts the video. The
+    // announcement is therefore never played for a blocked or unavailable URL.
+  }
+
   function step(delta) {
     var n = state.queue.length;
+    cancelPendingPlayback();
     state.index = ((state.index + delta) % n + n) % n;
-    showTrack(true);
+    renderNowPlaying(current());
+    scheduleTrackPlayback(current());
   }
 
   // ---------- YouTube IFrame API ----------
@@ -134,21 +301,37 @@
       height: "100%",
       videoId: current().youtubeId,
       playerVars: {
-        autoplay: 1,
+        autoplay: 0,
         rel: 0,               // related videos limited to same channel
         playsinline: 1
       },
       events: {
         onReady: function () {
           state.playerReady = true;
-          state.player.playVideo();
+          requestTrackPlayback(current());
         },
         onStateChange: function (e) {
+          if (e.data === YT.PlayerState.CUED && state.pendingPlayback) {
+            if (state.cueTimer) {
+              clearInterval(state.cueTimer);
+              state.cueTimer = null;
+            }
+            var pendingPlayback = state.pendingPlayback;
+            state.pendingPlayback = null;
+            pendingPlayback();
+          }
           if (e.data === YT.PlayerState.ENDED) step(1); // continuous broadcast
         },
         onError: function () {
           // Unavailable/blocked video: keep the station on the air.
-          setTimeout(function () { step(1); }, 1500);
+          state.pendingPlayback = null;
+          state.pendingTrack = null;
+          setPlaybackLocked(false);
+          state.playbackToken += 1;
+          state.errorTimer = setTimeout(function () {
+            state.errorTimer = null;
+            step(1);
+          }, 1500);
         }
       }
     });
@@ -157,6 +340,7 @@
   function start() {
     if (state.started) return;
     state.started = true;
+    els.startScreen.hidden = true;
     // Replaces the #player placeholder (and the Start button inside it) with the iframe.
     var tag = document.createElement("script");
     tag.src = "https://www.youtube.com/iframe_api";
@@ -182,7 +366,7 @@
     state.index = Math.max(0, idx);
   });
 
-  // Deep-linkable channels: radio.html#the-bronx etc.
+  // Deep-linkable channels: ./#the-bronx etc.
   var fromHash = CHANNELS.find(function (c) {
     return channelSlug(c) === (location.hash || "").replace("#", "");
   });
